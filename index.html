@@ -475,7 +475,12 @@ async function resumeCameraIfNeeded(){
   var wasActive=await sGet(activeKey,true);
   if(wasActive){
     var ok=await startLocalCameraAndConnect(true);
-    if(ok){camUnlocked=true;toast('📷 Camera resumed from before');}
+    if(ok){
+      camUnlocked=true;
+      toast('📷 Camera resumed from before');
+    }else{
+      toast('⚠️ Could not auto-resume your camera — open the 📹 Video tab and tap Open My Camera');
+    }
   }
 }
 async function closeCamera(){
@@ -905,6 +910,21 @@ function renderSaved(type){
 async function resetRoom(){
   if(!confirm('Reset the room? Both players will need to rejoin.'))return;
   await sSet(ROOM,fresh(),true);await sSet(SIG_KEY,{},true);
+  if(camPollTimer){clearInterval(camPollTimer);camPollTimer=null;}
+  if(pc){pc.close();pc=null;}
+  if(localStream){localStream.getTracks().forEach(function(t){t.stop();});localStream=null;}
+  camActive=false;camUnlocked=false;
+  document.getElementById('cam-local').srcObject=null;
+  document.getElementById('cam-remote').srcObject=null;
+  document.getElementById('btn-cam-remote-play').style.display='none';
+  document.getElementById('btn-cam-open').style.display='';
+  document.getElementById('btn-cam-close').style.display='none';
+  await Promise.all([
+    sSet(V_P1ACTIVE,false,true),sSet(V_P2ACTIVE,false,true),
+    sSet(V_P1GEN,0,true),sSet(V_P2GEN,0,true),
+    sSet(V_P1OFFER,null,true),sSet(V_P2ANSWER,null,true),
+    sDel(V_P1CANDS),sDel(V_P2CANDS)
+  ]);
   myRole=null;myName='';lastTs=0;roundHistory=[];
   if(pollTimer)clearInterval(pollTimer);pollTimer=null;
   document.getElementById('tab-history').style.display='none';
