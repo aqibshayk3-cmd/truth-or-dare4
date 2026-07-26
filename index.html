@@ -158,6 +158,7 @@ label{display:block;font-size:.67rem;letter-spacing:.14em;text-transform:upperca
         <div class="slots" id="slots"></div>
         <p style="margin-top:16px;text-align:center;font-size:.67rem;color:var(--mu);line-height:1.8">Share this page with your friend.<br>They pick the other seat — game starts instantly ✦</p>
         <button class="reset-btn" id="btn-reset">⟳ Reset Room</button>
+        <p id="diag-line" style="margin-top:14px;text-align:center;font-size:.6rem;color:var(--mu);letter-spacing:.05em">Checking connection...</p>
       </div>
     </div>
 
@@ -168,6 +169,7 @@ label{display:block;font-size:.67rem;letter-spacing:.14em;text-transform:upperca
         <span><span class="dot" id="d2"></span><span id="n2">—</span></span>
       </div>
       <div id="tbanner" class="tbanner yours">⟡ Your turn</div>
+      <button class="reset-btn" id="btn-reset-inline" style="display:none;margin-bottom:14px">⟳ Reset Room</button>
 
       <div class="ph card" id="ph-choose">
         <div class="clabel">Pick your poison</div>
@@ -360,6 +362,7 @@ label{display:block;font-size:.67rem;letter-spacing:.14em;text-transform:upperca
 <div class="toast" id="toast"></div>
 
 <script>
+const APP_VERSION = 'v3-diag1';
 const ROOM     = 'tod:room-v9';
 const PASS     = '03323';
 const WORD_MAX = 500;
@@ -792,6 +795,7 @@ async function poll(){
 /* ── Game renderer ── */
 function renderGame(state){
   if(!state||!myRole)return;
+  document.getElementById('btn-reset-inline').style.display='none';
   var myTurn=(state.turn===myRole),opp=myRole==='p1'?(state.p2||'—'):(state.p1||'—');
   document.getElementById('n1').textContent=state.p1||'—';document.getElementById('n2').textContent=state.p2||'—';
   document.getElementById('d1').className='dot'+(state.p1?' on':'');document.getElementById('d2').className='dot'+(state.p2?' on':'');
@@ -850,6 +854,14 @@ function renderGame(state){
     }
     return;
   }
+  // Should never get here — every valid phase returns above. If we do, the
+  // stored game state has an unexpected shape (often a sign that index.html
+  // and api/room.js are out of sync, or old/corrupted data is stuck in
+  // storage). Show this clearly instead of leaving the screen blank.
+  banner.textContent='⚠️ Unexpected game state — tap Reset Room below';
+  banner.className='tbanner punishbanner';
+  showPh(null);
+  document.getElementById('btn-reset-inline').style.display='block';
 }
 
 /* ── Game actions ── */
@@ -946,6 +958,7 @@ document.getElementById('btn-next').addEventListener('click',nextRound);
 document.getElementById('btn-confirm').addEventListener('click',confirmJoin);
 document.getElementById('btn-cancel').addEventListener('click',closeModal);
 document.getElementById('btn-reset').addEventListener('click',resetRoom);
+document.getElementById('btn-reset-inline').addEventListener('click',resetRoom);
 document.getElementById('name-inp').addEventListener('keydown',function(e){if(e.key==='Enter')confirmJoin();});
 
 document.getElementById('btn-cam-pass-cancel').addEventListener('click',function(){document.getElementById('cam-modal').style.display='none';document.getElementById('cam-pass-inp').value='';});
@@ -975,6 +988,29 @@ document.getElementById('btn-cam-close').addEventListener('click',function(){
   setTimeout(function(){document.getElementById('cam-pass-inp').focus();},80);
 });
 
+async function runDiagnostics(){
+  var el=document.getElementById('diag-line');
+  if(!el)return;
+  try{
+    var r=await fetch('/api/room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({op:'version'})});
+    var data=await r.json();
+    if(!data.hasEnvVars){
+      el.textContent='⚠️ Server is missing Upstash environment variables (see README) — game will not sync';
+      el.style.color='#e8607a';
+      return;
+    }
+    if(data.apiVersion!==APP_VERSION){
+      el.textContent='⚠️ index.html ('+APP_VERSION+') and api/room.js ('+(data.apiVersion||'unknown')+') are different versions — redeploy both files together';
+      el.style.color='#e8607a';
+      return;
+    }
+    el.textContent='✅ Connected — index.html and api/room.js are in sync ('+APP_VERSION+')';
+    el.style.color='#4ade80';
+  }catch(e){
+    el.textContent='⚠️ Could not reach /api/room at all — check your Vercel deployment';
+    el.style.color='#e8607a';
+  }
+}
 async function init(){
   var g=document.getElementById('slots');
   g.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--mu);font-size:.75rem;padding:20px 0"><div class="dots" style="justify-content:center"><span></span><span></span><span></span></div><div style="margin-top:10px">Loading room...</div></div>';
@@ -983,6 +1019,7 @@ async function init(){
   if(!s){s=fresh();await sSet(ROOM,s,true);}
   renderJoin();renderPunishList();
   setInterval(function(){if(!myRole)renderJoin();},2000);
+  runDiagnostics();
 }
 init();
 </script>
