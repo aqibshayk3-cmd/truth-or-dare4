@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Truth or Dare — Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0f;--sur:#13131a;--sur2:#1c1c27;--bdr:#2a2a3d;
+  --at:#e8c97a;--ad:#e8607a;
+  --gt:rgba(232,201,122,.14);--gd:rgba(232,96,122,.14);
+  --tx:#f0ede8;--mu:#7a7a9a;--gr:#4ade80;
+  --pu:#b07eff;--gp:rgba(176,126,255,.14);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:'Space Mono',monospace;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:20px;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 60% 40% at 15% 15%,rgba(232,201,122,.07) 0%,transparent 60%),radial-gradient(ellipse 55% 45% at 85% 85%,rgba(232,96,122,.07) 0%,transparent 60%);}
+.wrap{position:relative;z-index:1;width:100%;max-width:500px}
+.hdr{text-align:center;margin-bottom:20px;padding-top:10px}
+.logo{font-family:'Playfair Display',serif;font-size:clamp(2.2rem,8vw,3rem);font-weight:900;font-style:italic;letter-spacing:-1px;line-height:1}
+.lt{color:var(--at)}.lor{color:var(--mu);font-size:.45em;font-weight:400;vertical-align:middle;margin:0 10px}.ld{color:var(--ad)}
+.sub{color:var(--mu);font-size:.6rem;letter-spacing:.28em;text-transform:uppercase;margin-top:8px}
+.tabs{display:flex;gap:3px;background:var(--sur);border:1px solid var(--bdr);border-radius:14px;padding:5px;margin-bottom:16px;flex-wrap:wrap}
+.tab{flex:1;min-width:52px;padding:8px 4px;text-align:center;font-size:.55rem;letter-spacing:.07em;text-transform:uppercase;border-radius:10px;cursor:pointer;border:none;background:transparent;color:var(--mu);font-family:'Space Mono',monospace;transition:all .2s}
+.tab.active{background:var(--sur2);color:var(--tx);border:1px solid var(--bdr)}
+.tab.active.t-game{color:var(--gr)}.tab.active.t-punish{color:var(--ad)}.tab.active.t-rules{color:var(--at)}.tab.active.t-history{color:var(--pu)}.tab.active.t-video{color:#0ea5e9}
+.tab-icon{font-size:.8rem;display:block;margin-bottom:2px}
+.panel{display:none}.panel.on{display:block;animation:up .3s ease both}
+@keyframes up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:18px;padding:28px;margin-bottom:14px}
+.clabel{font-family:'Playfair Display',serif;font-style:italic;font-size:1.05rem;color:var(--mu);margin-bottom:20px}
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.slot{border:1.5px solid var(--bdr);border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;transition:all .2s;background:var(--sur2)}
+.slot:hover{border-color:var(--at);background:var(--gt);transform:translateY(-2px)}
+.slot.taken{cursor:pointer;opacity:.7}.slot.taken:hover{border-color:var(--ad);background:var(--gd);transform:translateY(-2px)}
+.slot.taken .stag{background:var(--gd);color:var(--ad);border:1px solid var(--ad)}
+.si{font-size:1.7rem;margin-bottom:8px}.st{font-family:'Playfair Display',serif;font-style:italic;font-size:1rem;margin-bottom:4px}
+.sn{font-size:.72rem;color:var(--mu);min-height:1.1em}
+.stag{display:inline-block;font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;padding:3px 9px;border-radius:20px;margin-top:10px}
+.open{background:var(--gt);color:var(--at);border:1px solid var(--at)}.tkn{background:var(--sur);color:var(--mu);border:1px solid var(--bdr)}
+.mbg{position:fixed;inset:0;background:rgba(10,10,15,.92);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;animation:fi .18s ease}
+@keyframes fi{from{opacity:0}to{opacity:1}}
+.modal{background:var(--sur);border:1px solid var(--bdr);border-radius:18px;padding:28px;width:100%;max-width:360px;animation:up .28s ease}
+.mtitle{font-family:'Playfair Display',serif;font-style:italic;font-size:1.25rem;margin-bottom:18px;text-align:center}
+input{width:100%;background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;color:var(--tx);font-family:'Space Mono',monospace;font-size:.85rem;padding:12px 16px;outline:none;transition:border-color .2s,box-shadow .2s}
+input:focus{border-color:var(--at);box-shadow:0 0 0 3px var(--gt)}
+label{display:block;font-size:.67rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin-bottom:8px}
+.field{margin-bottom:16px}
+.rich-editor{width:100%;min-height:80px;max-height:220px;overflow-y:auto;background:transparent;border:none;outline:none;color:var(--tx);font-family:'Space Mono',monospace;font-size:.9rem;line-height:1.7;padding:0;cursor:text;white-space:pre-wrap;word-break:break-word;}
+.rich-editor:empty::before{content:attr(data-placeholder);color:var(--mu);pointer-events:none;}
+.rich-editor img,.rich-editor video{max-width:100%;max-height:180px;border-radius:8px;display:block;margin:6px 0;object-fit:contain;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:10px;font-family:'Space Mono',monospace;font-size:.76rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;padding:13px 20px;width:100%;transition:all .18s ease}
+.btn:active{transform:scale(.97)}
+.bgold{background:var(--at);color:#0a0a0f}.bgold:hover{filter:brightness(1.1);box-shadow:0 0 18px var(--gt)}
+.bred{background:var(--ad);color:#fff}.bred:hover{filter:brightness(1.1);box-shadow:0 0 18px var(--gd)}
+.bghost{background:var(--sur2);color:var(--mu);border:1px solid var(--bdr)}.bghost:hover{color:var(--tx);border-color:var(--mu)}
+.bgreen{background:transparent;border:2px solid var(--gr);color:var(--gr)}.bgreen:hover{background:rgba(74,222,128,.09)}
+.bpurple{background:var(--pu);color:#0a0a0f;font-weight:700}.bpurple:hover{filter:brightness(1.1);box-shadow:0 0 18px var(--gp)}
+.bblue{background:#0ea5e9;color:#fff;font-weight:700}.bblue:hover{filter:brightness(1.1);box-shadow:0 0 18px rgba(14,165,233,.3)}
+.bsm{font-size:.67rem;padding:8px 14px;width:auto}
+.brow{display:flex;gap:10px}
+.btruth{background:transparent;border:2px solid var(--at);color:var(--at);flex:1;font-size:1rem;padding:20px;border-radius:12px}
+.btruth:hover{background:var(--gt);box-shadow:0 0 22px var(--gt)}
+.bdare{background:transparent;border:2px solid var(--ad);color:var(--ad);flex:1;font-size:1rem;padding:20px;border-radius:12px}
+.bdare:hover{background:var(--gd);box-shadow:0 0 22px var(--gd)}
+.sbar{display:flex;align-items:center;justify-content:space-between;background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;padding:10px 16px;margin-bottom:14px;font-size:.72rem;color:var(--mu)}
+.dot{width:7px;height:7px;border-radius:50%;background:#3a3a5a;display:inline-block;margin-right:6px;transition:background .3s}
+.dot.on{background:var(--gr);box-shadow:0 0 6px rgba(74,222,128,.5);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.tbanner{text-align:center;padding:13px;border-radius:10px;font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px}
+.yours{background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.28);color:var(--gr)}
+.theirs{background:var(--sur2);border:1px solid var(--bdr);color:var(--mu)}
+.punishbanner{background:rgba(176,126,255,.1);border:1px solid rgba(176,126,255,.28);color:var(--pu)}
+.crev{text-align:center;padding:18px 0 10px}
+.cbig{font-family:'Playfair Display',serif;font-size:3rem;font-weight:900;font-style:italic;line-height:1;animation:pop .35s cubic-bezier(.175,.885,.32,1.275) both}
+@keyframes pop{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}
+.cbig.truth{color:var(--at);text-shadow:0 0 40px var(--gt)}.cbig.dare{color:var(--ad);text-shadow:0 0 40px var(--gd)}
+.csub{color:var(--mu);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;margin-top:6px}
+.type-box{background:var(--sur2);border:1.5px solid var(--bdr);border-radius:14px;padding:20px;margin:14px 0}
+.type-box.truth{border-color:var(--at);box-shadow:0 0 20px var(--gt)}.type-box.dare{border-color:var(--ad);box-shadow:0 0 20px var(--gd)}.type-box.punish{border-color:var(--pu);box-shadow:0 0 20px var(--gp)}
+.type-hint{font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px}
+.type-hint.truth{color:var(--at)}.type-hint.dare{color:var(--ad)}.type-hint.punish{color:var(--pu)}
+.editor-footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.paste-hint{font-size:.58rem;color:var(--mu);display:flex;align-items:center;gap:4px;opacity:.75;flex-wrap:wrap}
+.paste-hint kbd{background:var(--bdr);color:var(--at);border-radius:4px;padding:1px 5px;font-family:'Space Mono',monospace;font-size:.6rem}
+.upload-label{color:var(--at);text-decoration:underline;cursor:pointer;font-size:.6rem;opacity:.9}
+.upload-label:hover{color:var(--tx)}
+.char-count{font-size:.62rem;color:var(--mu);text-align:right}
+.char-count.warn{color:#f0a050}.char-count.over{color:var(--ad)}
+.abox{background:var(--sur2);border:1px solid var(--bdr);border-radius:14px;padding:24px;margin:14px 0;font-size:.95rem;line-height:1.7;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
+.abox.truth{border-color:var(--at);box-shadow:inset 0 0 28px var(--gt)}.abox.dare{border-color:var(--ad);box-shadow:inset 0 0 28px var(--gd)}.abox.punish{border-color:var(--pu);box-shadow:inset 0 0 28px var(--gp)}
+.abox img,.abox video{max-width:100%;max-height:180px;border-radius:8px;object-fit:contain}
+.qlist{list-style:none;margin-top:10px;display:flex;flex-direction:column;gap:7px;max-height:140px;overflow-y:auto}
+.qi{background:var(--sur2);border:1px solid var(--bdr);border-radius:8px;padding:9px 13px;font-size:.78rem;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.qi button{background:none;border:none;color:var(--ad);cursor:pointer;font-size:1rem;padding:2px 6px;border-radius:4px}
+.qi button:hover{background:var(--gd)}
+.saved-row{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--bdr)}
+.saved-label{font-size:.62rem;color:var(--mu);text-transform:uppercase;letter-spacing:.12em}
+.dots{display:flex;gap:6px;justify-content:center;padding:10px 0}
+.dots span{width:7px;height:7px;border-radius:50%;background:var(--mu);animation:bob 1.2s infinite ease-in-out}
+.dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}
+@keyframes bob{0%,80%,100%{transform:scale(.6);opacity:.3}40%{transform:scale(1);opacity:1}}
+.scr{display:none}.scr.on{display:block;animation:up .35s ease both}
+.ph{display:none}
+.punish-grid{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.p-card{background:var(--sur2);border:1.5px solid var(--bdr);border-radius:14px;padding:16px 18px;display:flex;align-items:flex-start;gap:14px}
+.p-icon{font-size:1.5rem;min-width:36px;text-align:center;padding-top:2px}
+.p-title{font-size:.85rem;font-weight:700;color:var(--pu);margin-bottom:3px}.p-desc{font-size:.74rem;color:var(--mu);line-height:1.55}
+.spin-area{margin-top:16px;background:var(--sur2);border:1.5px solid var(--pu);border-radius:14px;padding:22px;text-align:center;box-shadow:0 0 20px var(--gp)}
+.spin-label{font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:var(--pu);margin-bottom:10px}
+.spin-big{font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:900;font-style:italic;color:var(--pu);text-shadow:0 0 28px var(--gp);line-height:1.2}
+.spin-desc{font-size:.76rem;color:var(--mu);line-height:1.6;margin-top:8px}
+.rules-section{margin-bottom:22px}
+.rules-title{font-family:'Playfair Display',serif;font-style:italic;font-size:1rem;color:var(--at);margin-bottom:12px}
+.rule-item{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--bdr)}
+.rule-item:last-child{border-bottom:none}
+.rule-num{font-size:.65rem;font-weight:700;color:var(--ad);min-width:22px;padding-top:2px}
+.rule-txt{font-size:.78rem;line-height:1.6}.rule-txt b{color:var(--at)}
+.rbadge{display:inline-block;font-size:.55rem;letter-spacing:.14em;text-transform:uppercase;padding:2px 7px;border-radius:20px;margin-left:6px;vertical-align:middle}
+.rb-t{background:var(--gt);color:var(--at);border:1px solid var(--at)}.rb-d{background:var(--gd);color:var(--ad);border:1px solid var(--ad)}.rb-p{background:var(--gp);color:var(--pu);border:1px solid var(--pu)}
+.hist-list{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+.hist-item{background:var(--sur2);border:1px solid var(--bdr);border-radius:12px;padding:14px 16px}
+.hist-round{font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin-bottom:6px}
+.hist-choice{display:inline-block;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;padding:2px 8px;border-radius:20px;margin-bottom:8px;font-weight:700}
+.hist-choice.truth{background:var(--gt);color:var(--at);border:1px solid var(--at)}.hist-choice.dare{background:var(--gd);color:var(--ad);border:1px solid var(--ad)}
+.hist-q{font-size:.78rem;color:var(--tx);margin-bottom:6px;line-height:1.5}
+.hist-a{font-size:.74rem;color:var(--mu);line-height:1.5;border-top:1px solid var(--bdr);padding-top:6px;margin-top:6px}
+.hist-a.punished{color:var(--pu)}
+.hist-empty{text-align:center;color:var(--mu);font-size:.76rem;padding:20px 0}
+.reset-btn{display:block;margin:14px auto 0;background:none;border:1px solid var(--bdr);color:var(--mu);font-family:'Space Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;padding:7px 16px;border-radius:8px;cursor:pointer;transition:all .2s}
+.reset-btn:hover{border-color:var(--ad);color:var(--ad)}
+.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--sur);border:1px solid var(--bdr);color:var(--tx);border-radius:10px;padding:11px 22px;font-size:.76rem;z-index:999;transition:transform .28s ease;pointer-events:none;white-space:nowrap}
+.toast.on{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <div class="logo"><span class="lt">Truth</span><span class="lor">or</span><span class="ld">Dare</span></div>
+    <div class="sub">Couples Edition · Spicy · Just pick a seat 🔥</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab t-game active" id="tab-game" onclick="switchTab('game')"><span class="tab-icon">🎮</span>Game</button>
+    <button class="tab t-punish" id="tab-punish" onclick="switchTab('punish')"><span class="tab-icon">⚡</span>Punish</button>
+    <button class="tab t-rules" id="tab-rules" onclick="switchTab('rules')"><span class="tab-icon">📜</span>Rules</button>
+    <button class="tab t-history" id="tab-history" onclick="switchTab('history')" style="display:none"><span class="tab-icon">📋</span>History</button>
+    <button class="tab t-video" id="tab-video" onclick="switchTab('video')"><span class="tab-icon">📹</span>Video</button>
+  </div>
+
+  <!-- GAME -->
+  <div class="panel on" id="panel-game">
+    <div class="scr on" id="s-join">
+      <div class="card">
+        <div class="clabel">Pick your seat to play</div>
+        <div class="slots" id="slots"></div>
+        <p style="margin-top:16px;text-align:center;font-size:.67rem;color:var(--mu);line-height:1.8">Share this page with your friend.<br>They pick the other seat — game starts instantly ✦</p>
+        <button class="reset-btn" id="btn-reset">⟳ Reset Room</button>
+      </div>
+    </div>
+
+    <div class="scr" id="s-game">
+      <div class="sbar">
+        <span><span class="dot" id="d1"></span><span id="n1">—</span></span>
+        <span style="font-size:.6rem">vs</span>
+        <span><span class="dot" id="d2"></span><span id="n2">—</span></span>
+      </div>
+      <div id="tbanner" class="tbanner yours">⟡ Your turn</div>
+
+      <div class="ph card" id="ph-choose">
+        <div class="clabel">Pick your poison</div>
+        <div class="brow">
+          <button class="btn btruth" id="btn-truth"><span style="font-family:'Playfair Display',serif;font-size:1.25rem;font-style:italic">Truth</span></button>
+          <button class="btn bdare" id="btn-dare"><span style="font-family:'Playfair Display',serif;font-size:1.25rem;font-style:italic">Dare</span></button>
+        </div>
+      </div>
+
+      <div class="ph card" id="ph-wait" style="text-align:center">
+        <div class="clabel" id="wait-msg">Waiting...</div>
+        <div class="dots"><span></span><span></span><span></span></div>
+      </div>
+
+      <div class="ph card" id="ph-type-truth">
+        <div class="crev"><div class="cbig truth">Truth</div><div class="csub" id="tt-sub">— ask them!</div></div>
+        <div class="type-box truth">
+          <div class="type-hint truth">✦ Ask them a truth question</div>
+          <div id="tt-input" class="rich-editor" contenteditable="true" data-placeholder="e.g. What's the first thing you noticed about me that made you fall for me? 👀"></div>
+          <div class="editor-footer"><span class="paste-hint">📋 Paste image/GIF: <kbd>Ctrl+V</kbd> &nbsp;or&nbsp;<label class="upload-label" for="tt-file">📎 Add photo/GIF/video</label><input type="file" id="tt-file" accept="image/*,video/*" style="display:none"></span><span class="char-count" id="tt-count">0 / 500 words</span></div>
+        </div>
+        <div class="saved-row"><span class="saved-label">Saved questions</span><button class="btn bghost bsm" id="tt-save-btn">+ Save</button></div>
+        <ul class="qlist" id="tt-saved"></ul>
+        <button class="btn bgold" style="margin-top:16px" id="tt-send-btn">Send Question →</button>
+      </div>
+
+      <div class="ph card" id="ph-type-dare">
+        <div class="crev"><div class="cbig dare">Dare</div><div class="csub" id="td-sub">— dare them!</div></div>
+        <div class="type-box dare">
+          <div class="type-hint dare">🔥 Give them a dare</div>
+          <div id="td-input" class="rich-editor" contenteditable="true" data-placeholder="e.g. Send me a voice note saying exactly what you love most about me 🔥"></div>
+          <div class="editor-footer"><span class="paste-hint">📋 Paste image/GIF: <kbd>Ctrl+V</kbd> &nbsp;or&nbsp;<label class="upload-label" for="td-file">📎 Add photo/GIF/video</label><input type="file" id="td-file" accept="image/*,video/*" style="display:none"></span><span class="char-count" id="td-count">0 / 500 words</span></div>
+        </div>
+        <div class="saved-row"><span class="saved-label">Saved dares</span><button class="btn bghost bsm" id="td-save-btn">+ Save</button></div>
+        <ul class="qlist" id="td-saved"></ul>
+        <button class="btn bred" style="margin-top:16px" id="td-send-btn">Send Dare →</button>
+      </div>
+
+      <div class="ph card" id="ph-answer">
+        <div class="crev"><div class="cbig" id="ans-big">Truth</div><div class="csub" id="ans-sub">You chose — now face it!</div></div>
+        <div class="abox" id="ans-box"><div class="dots"><span></span><span></span><span></span></div></div>
+        <div id="ans-type-wrap" style="display:none">
+          <div class="type-box truth" id="ans-type-box">
+            <div class="type-hint truth" id="ans-type-hint">✦ Type your answer</div>
+            <div id="ans-input" class="rich-editor" contenteditable="true" data-placeholder="Be honest... no hiding from babe 😏"></div>
+            <div class="editor-footer"><span class="paste-hint">📋 Paste image/GIF: <kbd>Ctrl+V</kbd> &nbsp;or&nbsp;<label class="upload-label" for="ans-file">📎 Add photo/GIF/video</label><input type="file" id="ans-file" accept="image/*,video/*" style="display:none"></span><span class="char-count" id="ans-count">0 / 500 words</span></div>
+          </div>
+          <button class="btn bgreen" id="btn-done" style="margin-top:14px">✓ Submit Answer</button>
+          <button class="btn bghost" id="btn-skip" style="margin-top:8px;border-color:var(--ad);color:var(--ad)">⚠️ Skip → Get Punished</button>
+          <div id="secret-picker" style="display:none;margin-top:18px">
+            <div style="font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--pu);margin-bottom:10px;text-align:center">🤫 Pick punishment for opponent</div>
+            <div id="secret-punish-grid" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ph card" id="ph-waitans">
+        <div class="crev"><div class="cbig" id="wa-big">Dare</div><div class="csub" id="wa-sub">Waiting for them...</div></div>
+        <div class="abox" id="wa-box"></div>
+        <div id="wa-ans-wrap" style="display:none;margin-top:14px">
+          <div style="font-size:.67rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin-bottom:8px">Their answer</div>
+          <div class="type-box" id="wa-ans-box" style="padding:16px 18px;font-size:.9rem;line-height:1.7;min-height:60px"></div>
+        </div>
+        <div id="wa-dots" class="dots" style="margin-top:10px"><span></span><span></span><span></span></div>
+      </div>
+
+      <div class="ph card" id="ph-done" style="text-align:center">
+        <div style="font-size:2.4rem;margin-bottom:10px" id="done-emoji">🎉</div>
+        <div style="font-family:'Playfair Display',serif;font-size:1.35rem;font-style:italic;margin-bottom:8px" id="done-title">Round Complete!</div>
+        <div id="done-msg" style="color:var(--mu);font-size:.82rem;margin-bottom:16px"></div>
+        <div id="punish-result-wrap" style="display:none;margin-bottom:18px">
+          <div style="font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--pu);margin-bottom:10px">⚡ Punishment Assigned</div>
+          <div class="abox punish" id="punish-result-box" style="flex-direction:column;align-items:center;gap:6px;padding:20px"></div>
+        </div>
+        <button class="btn bgold" id="btn-next">Next Round →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PUNISHMENT -->
+  <div class="panel" id="panel-punish">
+    <div class="card">
+      <div class="clabel">⚡ Punishments</div>
+      <p style="font-size:.74rem;color:var(--mu);line-height:1.7;margin-bottom:20px">When someone hits <b style="color:var(--ad)">Skip / Pass</b>, the game automatically spins a random punishment.</p>
+      <button class="btn bpurple" onclick="spinPunishment()">🎰 Spin Random Punishment</button>
+      <div id="spin-area" style="display:none;margin-top:16px" class="spin-area">
+        <div class="spin-label">Punishment is...</div>
+        <div class="spin-big" id="spin-result-text">—</div>
+        <div class="spin-desc" id="spin-result-desc"></div>
+      </div>
+      <div style="margin-top:22px;margin-bottom:12px;font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--mu)">📋 All Punishments</div>
+      <div class="punish-grid" id="punish-list"></div>
+    </div>
+  </div>
+
+  <!-- RULES -->
+  <div class="panel" id="panel-rules">
+    <div class="card">
+      <div class="clabel">📜 Game Rules</div>
+      <div class="rules-section">
+        <div class="rules-title">🎮 Basic Rules</div>
+        <div class="rule-item"><div class="rule-num">01</div><div class="rule-txt">Both players pick a seat to join — game starts automatically.</div></div>
+        <div class="rule-item"><div class="rule-num">02</div><div class="rule-txt">The player whose turn it is chooses <b>Truth</b> or <b>Dare</b>.</div></div>
+        <div class="rule-item"><div class="rule-num">03</div><div class="rule-txt">The other player types a question (truth) or a challenge (dare).</div></div>
+        <div class="rule-item"><div class="rule-num">04</div><div class="rule-txt">The first player submits their answer — then the turn switches.</div></div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title" style="color:var(--at)">✦ Truth Rules <span class="rbadge rb-t">Truth</span></div>
+        <div class="rule-item"><div class="rule-num">T1</div><div class="rule-txt"><b>You must tell the truth</b> — your partner will know if you're lying!</div></div>
+        <div class="rule-item"><div class="rule-num">T2</div><div class="rule-txt">Questions can get personal, but <b>always keep it respectful</b>.</div></div>
+        <div class="rule-item"><div class="rule-num">T3</div><div class="rule-txt">Skipping triggers an <b style="color:var(--pu)">automatic punishment spin</b>!</div></div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title" style="color:var(--ad)">🔥 Dare Rules <span class="rbadge rb-d">Dare</span></div>
+        <div class="rule-item"><div class="rule-num">D1</div><div class="rule-txt">You <b>must complete the dare</b> — send proof (screenshot, selfie, etc.).</div></div>
+        <div class="rule-item"><div class="rule-num">D2</div><div class="rule-txt">You have a <b>5-minute time limit</b> to complete the dare.</div></div>
+        <div class="rule-item"><div class="rule-num">D3</div><div class="rule-txt">Passing triggers a <b style="color:var(--pu)">punishment spin</b> — no mercy!</div></div>
+      </div>
+      <div class="rules-section">
+        <div class="rules-title" style="color:var(--pu)">⚡ Punishment Rules <span class="rbadge rb-p">Punishment</span></div>
+        <div class="rule-item"><div class="rule-num">P1</div><div class="rule-txt">Punishments <b>cannot be refused</b> — final is final.</div></div>
+        <div class="rule-item"><div class="rule-num">P2</div><div class="rule-txt">Punishments are <b>randomly spun</b> (unless Opponent Chooses lands).</div></div>
+        <div class="rule-item"><div class="rule-num">P3</div><div class="rule-txt">You must <b>send proof</b> of completing your punishment.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY (P1 only) -->
+  <div class="panel" id="panel-history">
+    <div class="card">
+      <div class="clabel">📋 Round History</div>
+      <p style="font-size:.7rem;color:var(--mu);margin-bottom:14px;line-height:1.6">🔐 Visible only to <b style="color:var(--at)">Player 1</b>.</p>
+      <div id="hist-list" class="hist-list"></div>
+    </div>
+  </div>
+
+  <!-- VIDEO (password-gated, both players) -->
+  <div class="panel" id="panel-video">
+    <div class="card">
+      <div class="clabel">📹 Live Camera</div>
+
+      <div id="cam-locked">
+        <p style="font-size:.74rem;color:var(--mu);line-height:1.7;margin-bottom:18px">Enter the camera password to unlock live video. Each person still has to grant their own browser camera permission — no one can turn on the other person's camera for them.</p>
+        <button class="btn bpurple" id="btn-cam-unlock">🔒 Unlock Camera</button>
+      </div>
+
+      <div id="cam-unlocked" style="display:none">
+        <div class="brow" style="margin-bottom:16px">
+          <button class="btn bgreen" id="btn-cam-open">📷 Open My Camera</button>
+          <button class="btn bghost" id="btn-cam-close" style="border-color:var(--ad);color:var(--ad);display:none">✕ Close My Camera</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;text-align:center">You</div>
+            <video id="cam-local" autoplay playsinline muted style="width:100%;border-radius:12px;background:#000;aspect-ratio:3/4;object-fit:cover"></video>
+          </div>
+          <div>
+            <div style="font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;text-align:center" id="cam-remote-label">Them</div>
+            <video id="cam-remote" autoplay playsinline style="width:100%;border-radius:12px;background:#000;aspect-ratio:3/4;object-fit:cover"></video>
+          </div>
+        </div>
+        <p style="font-size:.62rem;color:var(--mu);margin-top:14px;line-height:1.6">📶 Works best when both of you have a decent connection. Closing your camera also ends the call for both of you.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL -->
+<div class="mbg" id="modal" style="display:none">
+  <div class="modal">
+    <div class="mtitle" id="modal-title">Join Game</div>
+    <div id="modal-pass-step">
+      <div class="field"><label>🔐 Player 1 Password</label><input type="password" id="join-pass-inp" placeholder="Enter password..."></div>
+      <button class="btn bgold" id="btn-pass-confirm">Verify →</button>
+      <button class="btn bghost" style="margin-top:10px" id="btn-pass-cancel">Cancel</button>
+    </div>
+    <div id="modal-name-step" style="display:none">
+      <div class="field"><label>Your Name</label><input type="text" id="name-inp" placeholder="e.g. Alex" maxlength="20"></div>
+      <button class="btn bgold" id="btn-confirm">Join as <span id="mslot">Player 1</span> →</button>
+      <button class="btn bghost" style="margin-top:10px" id="btn-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- CAMERA PASSWORD MODAL -->
+<div class="mbg" id="cam-modal" style="display:none">
+  <div class="modal">
+    <div class="mtitle">🔒 Camera Password</div>
+    <div class="field"><label>Password</label><input type="password" id="cam-pass-inp" placeholder="Enter password..."></div>
+    <button class="btn bpurple" id="btn-cam-pass-confirm">Unlock →</button>
+    <button class="btn bghost" style="margin-top:10px" id="btn-cam-pass-cancel">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ROOM     = 'tod:room-v9';
+const PASS     = '03323';
+const WORD_MAX = 500;
+
+/* ── Live camera (password-gated, mutual, WebRTC) ── */
+const CAM_PASS  = '03323'; // change this if you want a different password just for the camera
+const VIDEO_KEY = 'tod:video-v1';
+const ICE_SERVERS = [{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}];
+let camUnlocked=false, camActive=false, localStream=null, pc=null, camPollTimer=null;
+let lastCandIdx=0;
+let _vq=Promise.resolve();
+function freshVideo(){return{p1Active:false,p2Active:false,p1Offer:null,p2Answer:null,p1Cands:[],p2Cands:[],ts:Date.now()};}
+function updateVideo(mutator){
+  _vq=_vq.then(async function(){
+    var v=await sGet(VIDEO_KEY,true)||freshVideo();
+    await mutator(v);
+    v.ts=Date.now();
+    await sSet(VIDEO_KEY,v,true);
+  }).catch(function(e){console.error('video update failed',e);});
+  return _vq;
+}
+function ensurePeerConnection(){
+  if(pc)return;
+  pc=new RTCPeerConnection({iceServers:ICE_SERVERS});
+  lastCandIdx=0;
+  if(localStream)localStream.getTracks().forEach(function(t){pc.addTrack(t,localStream);});
+  pc.ontrack=function(e){document.getElementById('cam-remote').srcObject=e.streams[0];};
+  pc.onicecandidate=function(e){
+    if(!e.candidate)return;
+    updateVideo(function(v){var f=myRole+'Cands';v[f]=v[f]||[];v[f].push(JSON.stringify(e.candidate));});
+  };
+}
+async function openCamera(){
+  if(!myRole){toast('Join the game first!');return;}
+  try{localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});}
+  catch(e){toast('⚠️ Camera/mic permission denied or unavailable');return;}
+  document.getElementById('cam-local').srcObject=localStream;
+  document.getElementById('btn-cam-open').style.display='none';
+  document.getElementById('btn-cam-close').style.display='';
+  camActive=true;
+  await updateVideo(function(v){v[myRole+'Active']=true;v.p1Offer=null;v.p2Answer=null;v.p1Cands=[];v.p2Cands=[];});
+  if(camPollTimer)clearInterval(camPollTimer);
+  camPollTimer=setInterval(pollVideo,1000);
+  pollVideo();
+  toast('📷 Camera on');
+}
+async function closeCamera(){
+  camActive=false;
+  if(camPollTimer){clearInterval(camPollTimer);camPollTimer=null;}
+  if(pc){pc.close();pc=null;}
+  if(localStream){localStream.getTracks().forEach(function(t){t.stop();});localStream=null;}
+  document.getElementById('cam-local').srcObject=null;
+  document.getElementById('cam-remote').srcObject=null;
+  document.getElementById('btn-cam-open').style.display='';
+  document.getElementById('btn-cam-close').style.display='none';
+  await updateVideo(function(v){v[myRole+'Active']=false;v.p1Offer=null;v.p2Answer=null;v.p1Cands=[];v.p2Cands=[];});
+  toast('📷 Camera off');
+}
+async function pollVideo(){
+  if(!myRole||!camActive)return;
+  var v=await sGet(VIDEO_KEY,true);if(!v)return;
+  var opp=myRole==='p1'?v.p2Active:v.p1Active;
+  document.getElementById('cam-remote-label').textContent=opp?'Them (live)':'Them (waiting...)';
+  var bothActive=v.p1Active&&v.p2Active;
+  if(!bothActive){
+    if(pc){pc.close();pc=null;}
+    document.getElementById('cam-remote').srcObject=null;
+    return;
+  }
+  ensurePeerConnection();
+  if(myRole==='p1'){
+    if(!v.p1Offer&&pc.signalingState==='stable'){
+      var offer=await pc.createOffer();await pc.setLocalDescription(offer);
+      await updateVideo(function(vv){vv.p1Offer=JSON.stringify(pc.localDescription);});
+    }else if(v.p2Answer&&pc.signalingState==='have-local-offer'){
+      await pc.setRemoteDescription(JSON.parse(v.p2Answer));
+    }
+    if(v.p2Cands&&v.p2Cands.length>lastCandIdx){
+      for(var i=lastCandIdx;i<v.p2Cands.length;i++){try{await pc.addIceCandidate(JSON.parse(v.p2Cands[i]));}catch(e){}}
+      lastCandIdx=v.p2Cands.length;
+    }
+  }else{
+    if(v.p1Offer&&!v.p2Answer&&!pc.currentRemoteDescription){
+      await pc.setRemoteDescription(JSON.parse(v.p1Offer));
+      var answer=await pc.createAnswer();await pc.setLocalDescription(answer);
+      await updateVideo(function(vv){vv.p2Answer=JSON.stringify(pc.localDescription);});
+    }
+    if(v.p1Cands&&v.p1Cands.length>lastCandIdx){
+      for(var j=lastCandIdx;j<v.p1Cands.length;j++){try{await pc.addIceCandidate(JSON.parse(v.p1Cands[j]));}catch(e){}}
+      lastCandIdx=v.p1Cands.length;
+    }
+  }
+}
+
+const PUNISHMENTS=[
+  {icon:'🤳',title:'Live Selfie',desc:'No filter, no retake — take a selfie and send it to your opponent.'},
+  {icon:'🎯',title:'Opponent Chooses',desc:'Your opponent picks your next dare — you must do it, no excuses!'},
+  {icon:'🤫',title:'Reveal a Secret',desc:'Share something personal you have never told anyone before.'},
+  {icon:'👀',title:'Show Surroundings',desc:'Take a live photo of exactly where you are right now. No tidying!'},
+  {icon:'💌',title:'Bold Compliment',desc:'Send your opponent one bold, heartfelt compliment — be direct!'},
+  {icon:'👕',title:'Remove Clothing',desc:'Take off one piece of clothing and send a photo to your opponent.'},
+];
+
+let myRole=null,myName='',pendingRole=null;
+let pollTimer=null,lastTs=0;
+let savedTruths=[
+  "What's the first thing you noticed about me that made you feel something? 👀",
+  "What's a fantasy you've been too shy to tell me about? 🌶️",
+  "Where's the most unexpected place you've thought about kissing me?",
+  "What's one thing I do that drives you absolutely crazy — in the best way? 😈",
+  "When did you first realize you were falling for me?",
+  "What's the most intimate moment we've shared that you think about often? 💭",
+  "If you could relive one night with me, which would it be and why?",
+  "What's something about your body you secretly hope I find attractive? 🔥",
+  "Have you ever lied to me about how you were feeling — what were you really thinking?",
+  "What's one thing you wish I'd do more of?",
+];
+let savedDares=[
+  "Send me a voice note describing exactly what you love most about my body 🎙️",
+  "Text me the most romantic thing you've never had the courage to say out loud 💌",
+  "Describe in detail what our perfect night together looks like — hold nothing back 🕯️",
+  "Write me a 3-sentence love letter right now and send it 📝",
+  "Tell me your favourite memory of us, with every detail you remember 🥂",
+  "Send a selfie with the expression you make when you think of me 😏",
+  "Describe where you'd take me on our dream date — spare no detail ✈️",
+  "Say the thing you always think but never say when we're together 🤫",
+];
+let spinInterval=null;
+let roundHistory=[];
+const SIG_KEY='tod:sig-v9';
+
+/* ── Storage: synced via /api/room (backed by Upstash Redis) so both players' devices share state ── */
+async function sGet(key,shared){
+  try{
+    var r=await fetch('/api/room?key='+encodeURIComponent(key));
+    if(!r.ok)throw new Error('bad status '+r.status);
+    var data=await r.json();
+    return data.value===undefined?null:data.value;
+  }catch(e){
+    console.error('storage get failed',e);
+    return null;
+  }
+}
+async function sSet(key,val,shared){
+  try{
+    var r=await fetch('/api/room?key='+encodeURIComponent(key),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(val)
+    });
+    if(!r.ok)throw new Error('bad status '+r.status);
+  }catch(e){
+    console.error('storage set failed',e);
+    toast('⚠️ Connection issue — check your Vercel/Upstash setup');
+  }
+}
+function fresh(){return{p1:null,p2:null,turn:'p1',phase:'waiting',choice:null,question:null,answer:null,status:null,punishment:null,ts:Date.now()};}
+
+/* ── Rich editor ── */
+function getWordCount(el){var t='';(function w(n){if(n.nodeType===3)t+=n.nodeValue;else if(n.nodeType===1&&n.tagName!=='IMG'&&n.tagName!=='VIDEO')n.childNodes.forEach(w);})(el);return t.trim().split(/\s+/).filter(function(x){return x.length>0;}).length;}
+function updateCount(eid,cid){var wc=getWordCount(document.getElementById(eid)),ce=document.getElementById(cid);ce.textContent=wc+' / '+WORD_MAX+' words';ce.className='char-count'+(wc>WORD_MAX?' over':wc>WORD_MAX*.85?' warn':'');}
+function getEC(id){return document.getElementById(id).innerHTML.trim();}
+function clearEditor(id,cid){document.getElementById(id).innerHTML='';updateCount(id,cid);}
+function setEC(id,html){document.getElementById(id).innerHTML=html||'';}
+function mediaLabel(html){if(!html)return'';if(html.indexOf('<video')!==-1)return'🎬 [video]';if(html.indexOf('<img')!==-1)return'📷 [image]';return'';}
+function insertNodeIntoEditor(el,node){
+  var sel=window.getSelection();
+  if(sel&&sel.rangeCount&&el.contains(sel.anchorNode)){var rng=sel.getRangeAt(0);rng.deleteContents();rng.insertNode(node);rng.setStartAfter(node);rng.collapse(true);sel.removeAllRanges();sel.addRange(rng);}
+  else el.appendChild(node);
+}
+function attachEditor(eid,cid){
+  var el=document.getElementById(eid);
+  el.addEventListener('input',function(){updateCount(eid,cid);});
+  el.addEventListener('paste',function(e){
+    var items=(e.clipboardData||window.clipboardData).items,media=null;
+    for(var i=0;i<items.length;i++){if(items[i].type.indexOf('image')!==-1||items[i].type.indexOf('video')!==-1){media=items[i];break;}}
+    if(!media)return;
+    e.preventDefault();
+    var f=media.getAsFile();if(!f)return;
+    var isVideo=f.type.indexOf('video')===0;
+    var r=new FileReader();
+    r.onload=function(ev){
+      var node=document.createElement(isVideo?'video':'img');
+      node.src=ev.target.result;
+      if(isVideo)node.controls=true;
+      node.style.cssText='max-width:100%;max-height:180px;border-radius:8px;display:block;margin:6px 0;object-fit:contain;';
+      insertNodeIntoEditor(el,node);
+      updateCount(eid,cid);toast(isVideo?'🎬 Video pasted!':'🖼️ Image pasted!');
+    };r.readAsDataURL(f);
+  });
+}
+function attachFileUpload(fid,eid,cid){
+  var input=document.getElementById(fid),el=document.getElementById(eid);
+  input.addEventListener('change',function(){
+    var f=input.files&&input.files[0];if(!f)return;
+    if(f.size>10*1024*1024){toast('File too large (max 10MB)');input.value='';return;}
+    var isVideo=f.type.indexOf('video')===0;
+    if(!isVideo&&f.type.indexOf('image')!==0){toast('Please choose an image, GIF, or video');input.value='';return;}
+    var r=new FileReader();
+    r.onload=function(ev){
+      var node=document.createElement(isVideo?'video':'img');
+      node.src=ev.target.result;
+      if(isVideo)node.controls=true;
+      node.style.cssText='max-width:100%;max-height:180px;border-radius:8px;display:block;margin:6px 0;object-fit:contain;';
+      insertNodeIntoEditor(el,node);
+      updateCount(eid,cid);
+      toast(isVideo?'🎬 Video added!':'🖼️ Image/GIF added!');
+      input.value='';
+    };
+    r.readAsDataURL(f);
+  });
+}
+function renderContent(el,html){el.innerHTML=html||'';}
+
+/* ── UI ── */
+function switchTab(n){
+  document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+  document.getElementById('panel-'+n).classList.add('on');
+  document.getElementById('tab-'+n).classList.add('active');
+  if(n==='punish')renderPunishList();
+  if(n==='history')renderHistory();
+}
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('on');setTimeout(function(){t.classList.remove('on');},2600);}
+function showScr(id){document.querySelectorAll('.scr').forEach(function(s){s.classList.remove('on');});document.getElementById(id).classList.add('on');}
+function showPh(id){document.querySelectorAll('.ph').forEach(function(p){p.style.display='none';});if(id)document.getElementById(id).style.display='block';}
+function cap(s){return s?s[0].toUpperCase()+s.slice(1):'';}
+
+/* ── Punishments ── */
+function renderPunishList(){var ul=document.getElementById('punish-list');ul.innerHTML='';PUNISHMENTS.forEach(function(p){var d=document.createElement('div');d.className='p-card';d.innerHTML='<div class="p-icon">'+p.icon+'</div><div><div class="p-title">'+p.title+'</div><div class="p-desc">'+p.desc+'</div></div>';ul.appendChild(d);});}
+function getRP(){return PUNISHMENTS[Math.floor(Math.random()*PUNISHMENTS.length)];}
+function spinPunishment(){
+  var area=document.getElementById('spin-area'),rt=document.getElementById('spin-result-text'),rd=document.getElementById('spin-result-desc');
+  area.style.display='block';rd.textContent='';
+  if(spinInterval)clearInterval(spinInterval);var c=0;
+  spinInterval=setInterval(function(){var p=PUNISHMENTS[Math.floor(Math.random()*PUNISHMENTS.length)];rt.textContent=p.icon+' '+p.title;c++;if(c>14){clearInterval(spinInterval);var f=getRP();rt.textContent=f.icon+' '+f.title;rd.textContent=f.desc;}},80);
+}
+
+/* ── History ── */
+function addToHistory(state){
+  if(myRole!=='p1')return;
+  roundHistory.push({n:roundHistory.length+1,asker:state.turn==='p1'?state.p2:state.p1,answerer:state.turn==='p1'?state.p1:state.p2,choice:state.choice,question:state.question,answer:state.answer,punishment:state.punishment});
+}
+function renderHistory(){
+  var list=document.getElementById('hist-list');list.innerHTML='';
+  if(!roundHistory.length){list.innerHTML='<div class="hist-empty">No rounds played yet.</div>';return;}
+  roundHistory.slice().reverse().forEach(function(r){
+    var div=document.createElement('div');div.className='hist-item';
+    var tmp=document.createElement('div');tmp.innerHTML=r.question||'';
+    var qText=tmp.textContent.trim().slice(0,100)||mediaLabel(r.question)||'(none)';
+    var aHTML='';
+    if(r.answer){var at=document.createElement('div');at.innerHTML=r.answer;aHTML='<div class="hist-a">✅ '+r.answerer+': '+(at.textContent.trim().slice(0,80)||mediaLabel(r.answer))+'</div>';}
+    else if(r.punishment){aHTML='<div class="hist-a punished">⚡ Skipped → '+r.punishment.icon+' '+r.punishment.title+'</div>';}
+    div.innerHTML='<div class="hist-round">Round '+r.n+'</div><span class="hist-choice '+r.choice+'">'+r.choice+'</span><div class="hist-q">'+r.asker+' asked: '+qText+'</div>'+aHTML;
+    list.appendChild(div);
+  });
+}
+
+/* ── Join / Lobby ── */
+async function renderJoin(){
+  var state=await sGet(ROOM,true)||fresh();
+  var g=document.getElementById('slots');
+  var p1T=!!state.p1,p2T=!!state.p2;
+  g.innerHTML=
+    '<div class="slot'+(p1T?' taken':'')+'" id="sl-p1"><div class="si">🎭</div><div class="st" style="color:var(--at)">Player 1</div><div class="sn">'+(p1T?state.p1:'')+'</div><span class="stag '+(p1T?'tkn':'open')+'">'+(p1T?'Rejoin ↩':'Open — tap')+'</span></div>'+
+    '<div class="slot'+(p2T?' taken':'')+'" id="sl-p2"><div class="si">🎲</div><div class="st" style="color:var(--ad)">Player 2</div><div class="sn">'+(p2T?state.p2:'')+'</div><span class="stag '+(p2T?'tkn':'open')+'">'+(p2T?'Rejoin ↩':'Open — tap')+'</span></div>';
+  document.getElementById('sl-p1').addEventListener('click',function(){openModal('p1');});
+  document.getElementById('sl-p2').addEventListener('click',function(){openModal('p2');});
+}
+
+function openModal(role){
+  pendingRole=role;
+  document.getElementById('mslot').textContent=role==='p1'?'Player 1':'Player 2';
+  if(role==='p1'){
+    document.getElementById('modal-title').textContent='🔐 Player 1 — Verify';
+    document.getElementById('modal-pass-step').style.display='block';
+    document.getElementById('modal-name-step').style.display='none';
+  } else {
+    document.getElementById('modal-title').textContent="What's your name?";
+    document.getElementById('modal-pass-step').style.display='none';
+    document.getElementById('modal-name-step').style.display='block';
+  }
+  document.getElementById('modal').style.display='flex';
+  setTimeout(function(){document.getElementById(role==='p1'?'join-pass-inp':'name-inp').focus();},80);
+}
+function closeModal(){
+  document.getElementById('modal').style.display='none';
+  document.getElementById('join-pass-inp').value='';
+  document.getElementById('name-inp').value='';
+  document.getElementById('modal-pass-step').style.display='block';
+  document.getElementById('modal-name-step').style.display='none';
+  pendingRole=null;
+}
+document.getElementById('btn-pass-confirm').addEventListener('click',function(){
+  if(document.getElementById('join-pass-inp').value!==PASS){toast('❌ Wrong password!');document.getElementById('join-pass-inp').value='';return;}
+  document.getElementById('join-pass-inp').value='';
+  document.getElementById('modal-pass-step').style.display='none';
+  document.getElementById('modal-title').textContent="What's your name?";
+  document.getElementById('modal-name-step').style.display='block';
+  setTimeout(function(){document.getElementById('name-inp').focus();},80);
+});
+document.getElementById('btn-pass-cancel').addEventListener('click',closeModal);
+document.getElementById('join-pass-inp').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('btn-pass-confirm').click();});
+
+async function confirmJoin(){
+  var name=document.getElementById('name-inp').value.trim();
+  if(!name){toast('Enter your name!');return;}
+  var state=await sGet(ROOM,true)||fresh();
+  myRole=pendingRole;myName=name;
+  if(myRole==='p1'){state.p1=name;document.getElementById('tab-history').style.display='';}
+  else state.p2=name;
+  if(state.p1&&state.p2){state.phase=state.phase==='waiting'?'choose':state.phase;state.turn=state.turn||'p1';}
+  state.ts=Date.now();
+  await sSet(ROOM,state,true);closeModal();
+  if(state.p1&&state.p2){showScr('s-game');renderGame(state);}
+  else{renderJoin();toast('Waiting for your friend...');}
+  startPoll();
+}
+
+function startPoll(){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(poll,1400);}
+async function poll(){
+  var state=await sGet(ROOM,true);if(!state)return;
+  if(document.getElementById('s-game').classList.contains('on')){if(state.ts!==lastTs){lastTs=state.ts;renderGame(state);}return;}
+  if(myRole){if(state.p1&&state.p2){showScr('s-game');lastTs=state.ts;renderGame(state);}else renderJoin();}
+  else renderJoin();
+}
+
+/* ── Game renderer ── */
+function renderGame(state){
+  if(!state||!myRole)return;
+  var myTurn=(state.turn===myRole),opp=myRole==='p1'?(state.p2||'—'):(state.p1||'—');
+  document.getElementById('n1').textContent=state.p1||'—';document.getElementById('n2').textContent=state.p2||'—';
+  document.getElementById('d1').className='dot'+(state.p1?' on':'');document.getElementById('d2').className='dot'+(state.p2?' on':'');
+  var banner=document.getElementById('tbanner');
+
+  if(state.phase==='waiting'){banner.textContent='⟡ Waiting for both players...';banner.className='tbanner theirs';showPh('ph-wait');document.getElementById('wait-msg').textContent='Waiting for the other player...';return;}
+  if(state.phase==='choose'){
+    if(myTurn){banner.textContent='⟡ Your turn — choose!';banner.className='tbanner yours';showPh('ph-choose');}
+    else{banner.textContent='⟡ '+opp+' is choosing...';banner.className='tbanner theirs';showPh('ph-wait');document.getElementById('wait-msg').textContent=opp+' is choosing Truth or Dare...';}
+    return;
+  }
+  if(state.phase==='set-question'){
+    if(!myTurn){
+      if(state.choice==='truth'){banner.textContent='⟡ Ask '+opp+' a truth!';banner.className='tbanner yours';showPh('ph-type-truth');document.getElementById('tt-sub').textContent=opp+' chose Truth — ask them!';renderSaved('truth');}
+      else{banner.textContent='⟡ Give '+opp+' a dare!';banner.className='tbanner yours';showPh('ph-type-dare');document.getElementById('td-sub').textContent=opp+' chose Dare — dare them!';renderSaved('dare');}
+    }else{var lb=state.choice==='truth'?'truth question':'dare';banner.textContent='⟡ '+opp+' is writing your '+lb+'...';banner.className='tbanner theirs';showPh('ph-wait');document.getElementById('wait-msg').textContent=opp+' is writing your '+lb+'...';}
+    return;
+  }
+  if(state.phase==='answer'){
+    if(myTurn){
+      banner.textContent='⟡ Face your '+state.choice+'!';banner.className='tbanner yours';showPh('ph-answer');
+      var ab=document.getElementById('ans-big');ab.textContent=cap(state.choice);ab.className='cbig '+state.choice;
+      document.getElementById('ans-sub').textContent='You chose — now face it!';
+      var abox=document.getElementById('ans-box');abox.className='abox '+state.choice;
+      var tw=document.getElementById('ans-type-wrap');
+      if(state.question){renderContent(abox,state.question);tw.style.display='block';document.getElementById('ans-type-box').className='type-box '+state.choice;var ath=document.getElementById('ans-type-hint');ath.className='type-hint '+state.choice;ath.textContent=state.choice==='truth'?'✦ Type your answer':'🔥 Describe your dare attempt';document.getElementById('btn-skip').style.display='';document.getElementById('secret-picker').style.display='none';}
+      else{abox.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';tw.style.display='none';}
+    }else{
+      banner.textContent='⟡ '+opp+' is responding...';banner.className='tbanner theirs';showPh('ph-waitans');
+      document.getElementById('wa-big').textContent=cap(state.choice);document.getElementById('wa-big').className='cbig '+state.choice;
+      var wb=document.getElementById('wa-box');wb.className='abox '+state.choice;renderContent(wb,state.question||'');
+      var ww=document.getElementById('wa-ans-wrap'),wab=document.getElementById('wa-ans-box'),wd=document.getElementById('wa-dots');
+      if(state.answer){wab.className='type-box '+state.choice;renderContent(wab,state.answer);ww.style.display='block';wd.style.display='none';document.getElementById('wa-sub').textContent=opp+' answered!';}
+      else{ww.style.display='none';wd.style.display='flex';document.getElementById('wa-sub').textContent=state.question?opp+' is typing...':'Sending question...';}
+    }
+    return;
+  }
+  if(state.phase==='round-done'){
+    if(state.ts!==lastTs)addToHistory(state);
+    showPh('ph-done');
+    var skipped=!state.answer;
+    document.getElementById('done-emoji').textContent=skipped?'⚡':'🎉';
+    document.getElementById('done-title').textContent=skipped?'Skipped — Punishment Time!':'Round Complete!';
+    banner.textContent=skipped?'⚡ Punishment assigned!':'⟡ Round over!';
+    banner.className='tbanner '+(skipped?'punishbanner':'theirs');
+    var de=document.getElementById('done-msg'),pw=document.getElementById('punish-result-wrap'),pb=document.getElementById('punish-result-box');
+    if(skipped&&state.punishment){
+      var p=state.punishment,wh=state.turn==='p1'?state.p1:state.p2;
+      de.textContent=wh+' skipped!';
+      pb.innerHTML='<div style="font-size:2.2rem;margin-bottom:6px">'+p.icon+'</div><div style="font-family:\'Playfair Display\',serif;font-style:italic;font-size:1.2rem;color:var(--pu);margin-bottom:8px">'+p.title+'</div><div style="font-size:.8rem;color:var(--tx);line-height:1.65;max-width:260px">'+p.desc+'</div>';
+      pw.style.display='block';
+    }else{
+      pw.style.display='none';
+      if(state.answer){var an=state.turn==='p1'?state.p1:state.p2;de.innerHTML=(state.status||'')+'<div style="margin-top:14px;background:var(--sur2);border:1px solid var(--bdr);border-radius:10px;padding:14px 16px;font-size:.85rem;line-height:1.6;text-align:left"><span style="font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);display:block;margin-bottom:6px">'+an+"'s answer</span>"+state.answer+'</div>';}
+      else de.textContent=state.status||'';
+    }
+    return;
+  }
+}
+
+/* ── Game actions ── */
+async function pick(c){var s=await sGet(ROOM,true);if(!s)return;s.choice=c;s.phase='set-question';s.question=null;s.ts=Date.now();await sSet(ROOM,s,true);renderGame(s);}
+
+async function sendQuestion(choice){
+  var eid=choice==='truth'?'tt-input':'td-input',cid=choice==='truth'?'tt-count':'td-count';
+  var el=document.getElementById(eid),wc=getWordCount(el),html=getEC(eid);
+  if(!html){toast('Write something first!');return;}if(wc>WORD_MAX){toast('Over 500 words!');return;}
+  var s=await sGet(ROOM,true);if(!s)return;
+  s.question=html;s.phase='answer';s.answer=null;s.ts=Date.now();
+  await sSet(ROOM,s,true);clearEditor(eid,cid);renderGame(s);
+}
+
+async function markDone(){
+  var el=document.getElementById('ans-input'),wc=getWordCount(el),html=getEC('ans-input');
+  if(!html){toast('Write your answer first!');return;}if(wc>WORD_MAX){toast('Over 500 words!');return;}
+  var s=await sGet(ROOM,true);if(!s)return;
+  var who=s.turn==='p1'?s.p1:s.p2;
+  s.answer=html;s.status=who+' answered the '+s.choice+'! 🎉';s.punishment=null;s.phase='round-done';s.ts=Date.now();
+  await sSet(ROOM,s,true);clearEditor('ans-input','ans-count');renderGame(s);
+}
+
+async function skipRound(){
+  if(myRole==='p1'){
+    var picker=document.getElementById('secret-picker'),grid=document.getElementById('secret-punish-grid');
+    grid.innerHTML='';
+    PUNISHMENTS.forEach(function(p){
+      var d=document.createElement('div');d.style.cssText='background:var(--sur2);border:1.5px solid var(--bdr);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .2s';
+      d.innerHTML='<span style="font-size:1.3rem">'+p.icon+'</span><div><div style="font-size:.82rem;font-weight:700;color:var(--pu)">'+p.title+'</div><div style="font-size:.7rem;color:var(--mu);line-height:1.4;margin-top:2px">'+p.desc+'</div></div>';
+      d.addEventListener('mouseenter',function(){this.style.borderColor='var(--pu)';this.style.background='var(--gp)';});
+      d.addEventListener('mouseleave',function(){this.style.borderColor='var(--bdr)';this.style.background='var(--sur2)';});
+      d.addEventListener('click',(function(pu){return async function(){document.getElementById('secret-picker').style.display='none';document.getElementById('btn-skip').style.display='none';await commitSkip(pu);};})(p));
+      grid.appendChild(d);
+    });
+    picker.style.display='block';document.getElementById('btn-skip').style.display='none';return;
+  }
+  await commitSkip(getRP());
+}
+async function commitSkip(p){var s=await sGet(ROOM,true);if(!s)return;s.answer=null;s.punishment=p;s.status=(s.turn==='p1'?s.p1:s.p2)+' skipped!';s.phase='round-done';s.ts=Date.now();await sSet(ROOM,s,true);renderGame(s);toast('⚡ Punishment assigned!');}
+async function nextRound(){var s=await sGet(ROOM,true);if(!s)return;s.turn=s.turn==='p1'?'p2':'p1';s.phase='choose';s.choice=null;s.question=null;s.answer=null;s.status=null;s.punishment=null;s.ts=Date.now();await sSet(ROOM,s,true);renderGame(s);}
+
+function saveQ(type){var eid=type==='truth'?'tt-input':'td-input',html=getEC(eid);if(!html){toast('Type something first!');return;}var list=type==='truth'?savedTruths:savedDares;if(list.indexOf(html)!==-1){toast('Already saved!');return;}list.push(html);renderSaved(type);toast('Saved!');}
+function renderSaved(type){
+  var lid=type==='truth'?'tt-saved':'td-saved',eid=type==='truth'?'tt-input':'td-input',cid=type==='truth'?'tt-count':'td-count';
+  var list=type==='truth'?savedTruths:savedDares,ul=document.getElementById(lid);ul.innerHTML='';
+  list.forEach(function(html){
+    var li=document.createElement('li');li.className='qi';
+    var tmp=document.createElement('div');tmp.innerHTML=html;
+    var prev=tmp.textContent.trim().slice(0,50)||mediaLabel(html);
+    var span=document.createElement('span');span.textContent=prev;
+    var btn=document.createElement('button');btn.textContent='↑';
+    (function(h){btn.addEventListener('click',function(){setEC(eid,h);updateCount(eid,cid);});})(html);
+    li.appendChild(span);li.appendChild(btn);ul.appendChild(li);
+  });
+}
+
+async function resetRoom(){
+  if(!confirm('Reset the room? Both players will need to rejoin.'))return;
+  await sSet(ROOM,fresh(),true);await sSet(SIG_KEY,{},true);
+  myRole=null;myName='';lastTs=0;roundHistory=[];
+  if(pollTimer)clearInterval(pollTimer);pollTimer=null;
+  document.getElementById('tab-history').style.display='none';
+  showScr('s-join');renderJoin();toast('Room reset!');
+}
+
+/* ── Wire up ── */
+attachEditor('tt-input','tt-count');attachEditor('td-input','td-count');attachEditor('ans-input','ans-count');
+attachFileUpload('tt-file','tt-input','tt-count');attachFileUpload('td-file','td-input','td-count');attachFileUpload('ans-file','ans-input','ans-count');
+document.getElementById('btn-truth').addEventListener('click',function(){pick('truth');});
+document.getElementById('btn-dare').addEventListener('click',function(){pick('dare');});
+document.getElementById('tt-send-btn').addEventListener('click',function(){sendQuestion('truth');});
+document.getElementById('td-send-btn').addEventListener('click',function(){sendQuestion('dare');});
+document.getElementById('tt-save-btn').addEventListener('click',function(){saveQ('truth');});
+document.getElementById('td-save-btn').addEventListener('click',function(){saveQ('dare');});
+document.getElementById('btn-done').addEventListener('click',markDone);
+document.getElementById('btn-skip').addEventListener('click',skipRound);
+document.getElementById('btn-next').addEventListener('click',nextRound);
+document.getElementById('btn-confirm').addEventListener('click',confirmJoin);
+document.getElementById('btn-cancel').addEventListener('click',closeModal);
+document.getElementById('btn-reset').addEventListener('click',resetRoom);
+document.getElementById('name-inp').addEventListener('keydown',function(e){if(e.key==='Enter')confirmJoin();});
+
+document.getElementById('btn-cam-unlock').addEventListener('click',function(){document.getElementById('cam-modal').style.display='flex';setTimeout(function(){document.getElementById('cam-pass-inp').focus();},80);});
+document.getElementById('btn-cam-pass-cancel').addEventListener('click',function(){document.getElementById('cam-modal').style.display='none';document.getElementById('cam-pass-inp').value='';});
+document.getElementById('btn-cam-pass-confirm').addEventListener('click',function(){
+  if(document.getElementById('cam-pass-inp').value!==CAM_PASS){toast('❌ Wrong password!');document.getElementById('cam-pass-inp').value='';return;}
+  document.getElementById('cam-pass-inp').value='';
+  document.getElementById('cam-modal').style.display='none';
+  camUnlocked=true;
+  document.getElementById('cam-locked').style.display='none';
+  document.getElementById('cam-unlocked').style.display='block';
+  toast('🔓 Camera unlocked!');
+});
+document.getElementById('cam-pass-inp').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('btn-cam-pass-confirm').click();});
+document.getElementById('btn-cam-open').addEventListener('click',openCamera);
+document.getElementById('btn-cam-close').addEventListener('click',closeCamera);
+
+async function init(){
+  var g=document.getElementById('slots');
+  g.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--mu);font-size:.75rem;padding:20px 0"><div class="dots" style="justify-content:center"><span></span><span></span><span></span></div><div style="margin-top:10px">Loading room...</div></div>';
+  var s=null;
+  for(var i=0;i<6;i++){try{s=await sGet(ROOM,true);if(s!==null)break;}catch(e){}await new Promise(function(r){setTimeout(r,500);});}
+  if(!s){s=fresh();await sSet(ROOM,s,true);}
+  renderJoin();renderPunishList();
+  setInterval(function(){if(!myRole)renderJoin();},2000);
+}
+init();
+</script>
+</body>
+</html>
