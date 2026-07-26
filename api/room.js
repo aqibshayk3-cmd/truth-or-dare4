@@ -23,16 +23,9 @@
 // other either.
 
 export default async function handler(req, res) {
+  const API_VERSION = 'v3-diag1';
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (!url || !token) {
-    res.status(500).json({
-      error:
-        'Server not configured: missing UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN environment variables in your Vercel project settings.',
-    });
-    return;
-  }
 
   let body = req.body;
   if (typeof body === 'string') {
@@ -44,6 +37,20 @@ export default async function handler(req, res) {
   }
   body = body || {};
   const op = body.op || 'get';
+
+  if (op === 'version') {
+    res.status(200).json({ apiVersion: API_VERSION, hasEnvVars: !!(url && token) });
+    return;
+  }
+
+  if (!url || !token) {
+    res.status(500).json({
+      error:
+        'Server not configured: missing UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN environment variables in your Vercel project settings.',
+      apiVersion: API_VERSION,
+    });
+    return;
+  }
 
   async function upstash(cmd) {
     const r = await fetch(url, {
