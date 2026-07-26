@@ -364,29 +364,64 @@ const ROOM     = 'tod:room-v9';
 const PASS     = '03323';
 const WORD_MAX = 500;
 
-/* ── Live camera (password-gated, mutual, WebRTC) ── */
+/* ── Live camera (password-gated, mutual, WebRTC) ──
+   Each piece of call data lives in its own storage key, and only ONE side
+   ever writes to any given key. That avoids the "two people editing the same
+   document" problem where one person's update could silently overwrite the
+   other's. ICE candidates use an atomic append (RPUSH) so nothing gets lost
+   even if both sides are sending updates at the same moment. */
 const CAM_PASS  = '03323'; // change this if you want a different password just for the camera
-const VIDEO_KEY = 'tod:video-v1';
-const ICE_SERVERS = [{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}];
+const V_P1ACTIVE='tod:video:p1active', V_P2ACTIVE='tod:video:p2active';
+const V_P1GEN='tod:video:p1gen', V_P2GEN='tod:video:p2gen';
+const V_P1OFFER='tod:video:p1offer', V_P2ANSWER='tod:video:p2answer';
+const V_P1CANDS='tod:video:p1cands', V_P2CANDS='tod:video:p2cands';
+// STUN handles same-network / simple-NAT calls. TURN (relay) is required when
+// the two phones are behind stricter or different-network NATs (e.g. one on
+// home wifi, one on mobile data) — without it, many real-world calls between
+// two different locations simply never connect. These TURN credentials are
+// the public, free "Open Relay Project" test servers.
+const ICE_SERVERS=[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+  {urls:'stun:stun.relay.metered.ca:80'},
+  {urls:'turn:global.relay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:global.relay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
+  {urls:'turn:global.relay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
+];
 let camUnlocked=false, camActive=false, localStream=null, pc=null, camPollTimer=null;
-let lastCandIdx=0;
-let lastSeenGen=-1;
-let camModalPurpose='unlock'; // 'unlock' (reveal panel/open) or 'close' (turn camera off)
-let _vq=Promise.resolve();
-function freshVideo(){return{p1Active:false,p2Active:false,gen:0,p1Offer:null,p2Answer:null,p1Cands:[],p2Cands:[],ts:Date.now()};}
-function updateVideo(mutator){
-  _vq=_vq.then(async function(){
-    var v=await sGet(VIDEO_KEY,true)||freshVideo();
-    await mutator(v);
-    v.ts=Date.now();
-    await sSet(VIDEO_KEY,v,true);
-  }).catch(function(e){console.error('video update failed',e);});
-  return _vq;
+let myGen=0, lastSeenPeerGen=-1, lastAppliedOffer=null, lastAppliedAnswer=null, candIdx=0;
+let camModalPurpose='unlock'; // 'unlock' (view tab/open) or 'close' (turn camera off)
+
+async function sPush(key,val){
+  try{
+    var r=await fetch('/api/room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({op:'push',key:key,value:val})});
+    if(!r.ok)throw new Error('bad status '+r.status);
+  }catch(e){console.error('storage push failed',e);}
 }
+async function sList(key){
+  try{
+    var r=await fetch('/api/room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({op:'list',key:key})});
+    if(!r.ok)throw new Error('bad status '+r.status);
+    var data=await r.json();
+    return data.value||[];
+  }catch(e){console.error('storage list failed',e);return [];}
+}
+async function sDel(key){
+  try{await fetch('/api/room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({op:'del',key:key})});}
+  catch(e){console.error('storage del failed',e);}
+}
+async function sMGet(keys){
+  try{
+    var r=await fetch('/api/room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({op:'mget',keys:keys})});
+    if(!r.ok)throw new Error('bad status '+r.status);
+    var data=await r.json();
+    return data.values||keys.map(function(){return null;});
+  }catch(e){console.error('storage mget failed',e);return keys.map(function(){return null;});}
+}
+
 function ensurePeerConnection(){
   if(pc)return;
   pc=new RTCPeerConnection({iceServers:ICE_SERVERS});
-  lastCandIdx=0;
   if(localStream)localStream.getTracks().forEach(function(t){pc.addTrack(t,localStream);});
   pc.ontrack=function(e){
     var rv=document.getElementById('cam-remote');
@@ -399,8 +434,18 @@ function ensurePeerConnection(){
   };
   pc.onicecandidate=function(e){
     if(!e.candidate)return;
-    updateVideo(function(v){var f=myRole+'Cands';v[f]=v[f]||[];v[f].push(JSON.stringify(e.candidate));});
+    sPush(myRole==='p1'?V_P1CANDS:V_P2CANDS, e.candidate);
   };
+}
+async function startFreshSession(){
+  myGen=Date.now();
+  var genKey=myRole==='p1'?V_P1GEN:V_P2GEN;
+  var activeKey=myRole==='p1'?V_P1ACTIVE:V_P2ACTIVE;
+  await sSet(genKey,myGen,true);
+  await sSet(activeKey,true,true);
+  if(myRole==='p1'){await sSet(V_P1OFFER,null,true);await sDel(V_P1CANDS);}
+  else{await sSet(V_P2ANSWER,null,true);await sDel(V_P2CANDS);}
+  lastAppliedOffer=null;lastAppliedAnswer=null;candIdx=0;
 }
 async function startLocalCameraAndConnect(resuming){
   try{localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});}
@@ -413,9 +458,9 @@ async function startLocalCameraAndConnect(resuming){
   document.getElementById('btn-cam-open').style.display='none';
   document.getElementById('btn-cam-close').style.display='';
   camActive=true;
-  await updateVideo(function(v){v[myRole+'Active']=true;v.gen=(v.gen||0)+1;v.p1Offer=null;v.p2Answer=null;v.p1Cands=[];v.p2Cands=[];});
+  await startFreshSession();
   if(camPollTimer)clearInterval(camPollTimer);
-  camPollTimer=setInterval(pollVideo,1000);
+  camPollTimer=setInterval(pollVideo,900);
   pollVideo();
   return true;
 }
@@ -426,13 +471,11 @@ async function openCamera(){
 }
 async function resumeCameraIfNeeded(){
   if(!myRole||camActive)return;
-  var v=await sGet(VIDEO_KEY,true);
-  if(v&&v[myRole+'Active']){
+  var activeKey=myRole==='p1'?V_P1ACTIVE:V_P2ACTIVE;
+  var wasActive=await sGet(activeKey,true);
+  if(wasActive){
     var ok=await startLocalCameraAndConnect(true);
-    if(ok){
-      camUnlocked=true;
-      toast('📷 Camera resumed from before');
-    }
+    if(ok){camUnlocked=true;toast('📷 Camera resumed from before');}
   }
 }
 async function closeCamera(){
@@ -444,22 +487,25 @@ async function closeCamera(){
   document.getElementById('cam-remote').srcObject=null;document.getElementById('btn-cam-remote-play').style.display='none';
   document.getElementById('btn-cam-open').style.display='';
   document.getElementById('btn-cam-close').style.display='none';
-  await updateVideo(function(v){v[myRole+'Active']=false;v.p1Offer=null;v.p2Answer=null;v.p1Cands=[];v.p2Cands=[];});
+  var activeKey=myRole==='p1'?V_P1ACTIVE:V_P2ACTIVE;
+  await sSet(activeKey,false,true);
   toast('📷 Camera off');
 }
 async function pollVideo(){
   if(!myRole||!camActive)return;
-  var v=await sGet(VIDEO_KEY,true);if(!v)return;
-  if(v.gen!==lastSeenGen){
-    lastSeenGen=v.gen;
+  var vals=await sMGet([V_P1ACTIVE,V_P2ACTIVE,V_P1GEN,V_P2GEN,V_P1OFFER,V_P2ANSWER]);
+  var p1Active=vals[0],p2Active=vals[1],p1Gen=vals[2],p2Gen=vals[3],p1Offer=vals[4],p2Answer=vals[5];
+  var opp=myRole==='p1'?p2Active:p1Active;
+  document.getElementById('cam-remote-label').textContent=opp?'Them (live)':'Them (waiting...)';
+  var peerGen=myRole==='p1'?p2Gen:p1Gen;
+  if(peerGen!==lastSeenPeerGen){
+    lastSeenPeerGen=peerGen;
     if(pc){pc.close();pc=null;}
-    lastCandIdx=0;
+    candIdx=0;lastAppliedOffer=null;lastAppliedAnswer=null;
     document.getElementById('cam-remote').srcObject=null;
     document.getElementById('btn-cam-remote-play').style.display='none';
   }
-  var opp=myRole==='p1'?v.p2Active:v.p1Active;
-  document.getElementById('cam-remote-label').textContent=opp?'Them (live)':'Them (waiting...)';
-  var bothActive=v.p1Active&&v.p2Active;
+  var bothActive=p1Active&&p2Active;
   if(!bothActive){
     if(pc){pc.close();pc=null;}
     document.getElementById('cam-remote').srcObject=null;document.getElementById('btn-cam-remote-play').style.display='none';
@@ -467,25 +513,31 @@ async function pollVideo(){
   }
   ensurePeerConnection();
   if(myRole==='p1'){
-    if(!v.p1Offer&&pc.signalingState==='stable'){
+    if(!p1Offer&&pc.signalingState==='stable'){
       var offer=await pc.createOffer();await pc.setLocalDescription(offer);
-      await updateVideo(function(vv){vv.p1Offer=JSON.stringify(pc.localDescription);});
-    }else if(v.p2Answer&&pc.signalingState==='have-local-offer'){
-      await pc.setRemoteDescription(JSON.parse(v.p2Answer));
+      await sSet(V_P1OFFER,pc.localDescription,true);
+      lastAppliedOffer=JSON.stringify(pc.localDescription);
+    }else if(p2Answer&&JSON.stringify(p2Answer)!==lastAppliedAnswer&&pc.signalingState==='have-local-offer'){
+      await pc.setRemoteDescription(p2Answer);
+      lastAppliedAnswer=JSON.stringify(p2Answer);
     }
-    if(v.p2Cands&&v.p2Cands.length>lastCandIdx){
-      for(var i=lastCandIdx;i<v.p2Cands.length;i++){try{await pc.addIceCandidate(JSON.parse(v.p2Cands[i]));}catch(e){}}
-      lastCandIdx=v.p2Cands.length;
+    var newCands=await sList(V_P2CANDS);
+    if(newCands.length>candIdx){
+      for(var i=candIdx;i<newCands.length;i++){try{await pc.addIceCandidate(newCands[i]);}catch(e){}}
+      candIdx=newCands.length;
     }
   }else{
-    if(v.p1Offer&&!v.p2Answer&&!pc.currentRemoteDescription){
-      await pc.setRemoteDescription(JSON.parse(v.p1Offer));
+    if(p1Offer&&JSON.stringify(p1Offer)!==lastAppliedOffer){
+      await pc.setRemoteDescription(p1Offer);
+      lastAppliedOffer=JSON.stringify(p1Offer);
       var answer=await pc.createAnswer();await pc.setLocalDescription(answer);
-      await updateVideo(function(vv){vv.p2Answer=JSON.stringify(pc.localDescription);});
+      await sSet(V_P2ANSWER,pc.localDescription,true);
+      lastAppliedAnswer=JSON.stringify(pc.localDescription);
     }
-    if(v.p1Cands&&v.p1Cands.length>lastCandIdx){
-      for(var j=lastCandIdx;j<v.p1Cands.length;j++){try{await pc.addIceCandidate(JSON.parse(v.p1Cands[j]));}catch(e){}}
-      lastCandIdx=v.p1Cands.length;
+    var newCands2=await sList(V_P1CANDS);
+    if(newCands2.length>candIdx){
+      for(var j=candIdx;j<newCands2.length;j++){try{await pc.addIceCandidate(newCands2[j]);}catch(e){}}
+      candIdx=newCands2.length;
     }
   }
 }
@@ -530,7 +582,7 @@ const SIG_KEY='tod:sig-v9';
 /* ── Storage: synced via /api/room (backed by Upstash Redis) so both players' devices share state ── */
 async function sGet(key,shared){
   try{
-    var r=await fetch('/api/room?key='+encodeURIComponent(key));
+    var r=await fetch('/api/room',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({op:'get',key:key})});
     if(!r.ok)throw new Error('bad status '+r.status);
     var data=await r.json();
     return data.value===undefined?null:data.value;
@@ -541,10 +593,10 @@ async function sGet(key,shared){
 }
 async function sSet(key,val,shared){
   try{
-    var r=await fetch('/api/room?key='+encodeURIComponent(key),{
+    var r=await fetch('/api/room',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(val)
+      body:JSON.stringify({op:'set',key:key,value:val})
     });
     if(!r.ok)throw new Error('bad status '+r.status);
   }catch(e){
