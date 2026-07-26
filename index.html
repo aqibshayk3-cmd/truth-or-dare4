@@ -304,33 +304,27 @@ label{display:block;font-size:.67rem;letter-spacing:.14em;text-transform:upperca
     </div>
   </div>
 
-  <!-- VIDEO (password-gated, both players) -->
+  <!-- VIDEO (tab itself is password-gated — see switchTab) -->
   <div class="panel" id="panel-video">
     <div class="card">
       <div class="clabel">📹 Live Camera</div>
-
-      <div id="cam-locked">
-        <p style="font-size:.74rem;color:var(--mu);line-height:1.7;margin-bottom:18px">Enter the camera password to unlock live video. Each person still has to grant their own browser camera permission — no one can turn on the other person's camera for them.</p>
-        <button class="btn bpurple" id="btn-cam-unlock">🔒 Unlock Camera</button>
+      <p style="font-size:.7rem;color:var(--mu);line-height:1.7;margin-bottom:16px">Each person grants their own browser camera permission — no one can turn on the other person's camera for them.</p>
+      <div class="brow" style="margin-bottom:16px">
+        <button class="btn bgreen" id="btn-cam-open">📷 Open My Camera</button>
+        <button class="btn bghost" id="btn-cam-close" style="border-color:var(--ad);color:var(--ad);display:none">✕ Close My Camera</button>
       </div>
-
-      <div id="cam-unlocked" style="display:none">
-        <div class="brow" style="margin-bottom:16px">
-          <button class="btn bgreen" id="btn-cam-open">📷 Open My Camera</button>
-          <button class="btn bghost" id="btn-cam-close" style="border-color:var(--ad);color:var(--ad);display:none">✕ Close My Camera</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <div style="font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;text-align:center">You</div>
+          <video id="cam-local" autoplay playsinline muted style="width:100%;border-radius:12px;background:#000;aspect-ratio:3/4;object-fit:cover"></video>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <div style="font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;text-align:center">You</div>
-            <video id="cam-local" autoplay playsinline muted style="width:100%;border-radius:12px;background:#000;aspect-ratio:3/4;object-fit:cover"></video>
-          </div>
-          <div>
-            <div style="font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;text-align:center" id="cam-remote-label">Them</div>
-            <video id="cam-remote" autoplay playsinline style="width:100%;border-radius:12px;background:#000;aspect-ratio:3/4;object-fit:cover"></video>
-          </div>
+        <div style="position:relative">
+          <div style="font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mu);margin-bottom:6px;text-align:center" id="cam-remote-label">Them</div>
+          <video id="cam-remote" autoplay playsinline style="width:100%;border-radius:12px;background:#000;aspect-ratio:3/4;object-fit:cover"></video>
+          <button id="btn-cam-remote-play" style="display:none;position:absolute;left:50%;top:calc(50% + 10px);transform:translate(-50%,-50%);background:var(--pu);color:#0a0a0f;border:none;border-radius:50%;width:56px;height:56px;font-size:1.3rem;cursor:pointer">▶</button>
         </div>
-        <p style="font-size:.62rem;color:var(--mu);margin-top:14px;line-height:1.6">📶 Once your camera is open, it stays on — even if you close the tab or come back later, it reconnects automatically. Turning it off always asks for the password again.</p>
       </div>
+      <p style="font-size:.62rem;color:var(--mu);margin-top:14px;line-height:1.6">📶 Once your camera is open, it stays on — even if you close the tab or come back later, it reconnects automatically. Turning it off always asks for the password again.</p>
     </div>
   </div>
 
@@ -376,9 +370,10 @@ const VIDEO_KEY = 'tod:video-v1';
 const ICE_SERVERS = [{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}];
 let camUnlocked=false, camActive=false, localStream=null, pc=null, camPollTimer=null;
 let lastCandIdx=0;
+let lastSeenGen=-1;
 let camModalPurpose='unlock'; // 'unlock' (reveal panel/open) or 'close' (turn camera off)
 let _vq=Promise.resolve();
-function freshVideo(){return{p1Active:false,p2Active:false,p1Offer:null,p2Answer:null,p1Cands:[],p2Cands:[],ts:Date.now()};}
+function freshVideo(){return{p1Active:false,p2Active:false,gen:0,p1Offer:null,p2Answer:null,p1Cands:[],p2Cands:[],ts:Date.now()};}
 function updateVideo(mutator){
   _vq=_vq.then(async function(){
     var v=await sGet(VIDEO_KEY,true)||freshVideo();
@@ -393,7 +388,15 @@ function ensurePeerConnection(){
   pc=new RTCPeerConnection({iceServers:ICE_SERVERS});
   lastCandIdx=0;
   if(localStream)localStream.getTracks().forEach(function(t){pc.addTrack(t,localStream);});
-  pc.ontrack=function(e){document.getElementById('cam-remote').srcObject=e.streams[0];};
+  pc.ontrack=function(e){
+    var rv=document.getElementById('cam-remote');
+    if(rv.srcObject!==e.streams[0])rv.srcObject=e.streams[0];
+    var playBtn=document.getElementById('btn-cam-remote-play');
+    rv.play().then(function(){playBtn.style.display='none';}).catch(function(){
+      // Browser blocked autoplay of unmuted video — let the user start it with one tap
+      playBtn.style.display='block';
+    });
+  };
   pc.onicecandidate=function(e){
     if(!e.candidate)return;
     updateVideo(function(v){var f=myRole+'Cands';v[f]=v[f]||[];v[f].push(JSON.stringify(e.candidate));});
@@ -410,7 +413,7 @@ async function startLocalCameraAndConnect(resuming){
   document.getElementById('btn-cam-open').style.display='none';
   document.getElementById('btn-cam-close').style.display='';
   camActive=true;
-  await updateVideo(function(v){v[myRole+'Active']=true;v.p1Offer=null;v.p2Answer=null;v.p1Cands=[];v.p2Cands=[];});
+  await updateVideo(function(v){v[myRole+'Active']=true;v.gen=(v.gen||0)+1;v.p1Offer=null;v.p2Answer=null;v.p1Cands=[];v.p2Cands=[];});
   if(camPollTimer)clearInterval(camPollTimer);
   camPollTimer=setInterval(pollVideo,1000);
   pollVideo();
@@ -428,8 +431,6 @@ async function resumeCameraIfNeeded(){
     var ok=await startLocalCameraAndConnect(true);
     if(ok){
       camUnlocked=true;
-      document.getElementById('cam-locked').style.display='none';
-      document.getElementById('cam-unlocked').style.display='block';
       toast('📷 Camera resumed from before');
     }
   }
@@ -440,7 +441,7 @@ async function closeCamera(){
   if(pc){pc.close();pc=null;}
   if(localStream){localStream.getTracks().forEach(function(t){t.stop();});localStream=null;}
   document.getElementById('cam-local').srcObject=null;
-  document.getElementById('cam-remote').srcObject=null;
+  document.getElementById('cam-remote').srcObject=null;document.getElementById('btn-cam-remote-play').style.display='none';
   document.getElementById('btn-cam-open').style.display='';
   document.getElementById('btn-cam-close').style.display='none';
   await updateVideo(function(v){v[myRole+'Active']=false;v.p1Offer=null;v.p2Answer=null;v.p1Cands=[];v.p2Cands=[];});
@@ -449,12 +450,19 @@ async function closeCamera(){
 async function pollVideo(){
   if(!myRole||!camActive)return;
   var v=await sGet(VIDEO_KEY,true);if(!v)return;
+  if(v.gen!==lastSeenGen){
+    lastSeenGen=v.gen;
+    if(pc){pc.close();pc=null;}
+    lastCandIdx=0;
+    document.getElementById('cam-remote').srcObject=null;
+    document.getElementById('btn-cam-remote-play').style.display='none';
+  }
   var opp=myRole==='p1'?v.p2Active:v.p1Active;
   document.getElementById('cam-remote-label').textContent=opp?'Them (live)':'Them (waiting...)';
   var bothActive=v.p1Active&&v.p2Active;
   if(!bothActive){
     if(pc){pc.close();pc=null;}
-    document.getElementById('cam-remote').srcObject=null;
+    document.getElementById('cam-remote').srcObject=null;document.getElementById('btn-cam-remote-play').style.display='none';
     return;
   }
   ensurePeerConnection();
@@ -604,6 +612,14 @@ function renderContent(el,html){el.innerHTML=html||'';}
 
 /* ── UI ── */
 function switchTab(n){
+  if(n==='video'&&!camUnlocked){
+    camModalPurpose='unlock';
+    document.querySelector('#cam-modal .mtitle').textContent='🔒 Enter password to view Video tab';
+    document.getElementById('btn-cam-pass-confirm').textContent='Unlock →';
+    document.getElementById('cam-modal').style.display='flex';
+    setTimeout(function(){document.getElementById('cam-pass-inp').focus();},80);
+    return;
+  }
   document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('on');});
   document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
   document.getElementById('panel-'+n).classList.add('on');
@@ -860,13 +876,6 @@ document.getElementById('btn-cancel').addEventListener('click',closeModal);
 document.getElementById('btn-reset').addEventListener('click',resetRoom);
 document.getElementById('name-inp').addEventListener('keydown',function(e){if(e.key==='Enter')confirmJoin();});
 
-document.getElementById('btn-cam-unlock').addEventListener('click',function(){
-  camModalPurpose='unlock';
-  document.querySelector('#cam-modal .mtitle').textContent='🔒 Camera Password';
-  document.getElementById('btn-cam-pass-confirm').textContent='Unlock →';
-  document.getElementById('cam-modal').style.display='flex';
-  setTimeout(function(){document.getElementById('cam-pass-inp').focus();},80);
-});
 document.getElementById('btn-cam-pass-cancel').addEventListener('click',function(){document.getElementById('cam-modal').style.display='none';document.getElementById('cam-pass-inp').value='';});
 document.getElementById('btn-cam-pass-confirm').addEventListener('click',function(){
   if(document.getElementById('cam-pass-inp').value!==CAM_PASS){toast('❌ Wrong password!');document.getElementById('cam-pass-inp').value='';return;}
@@ -877,12 +886,15 @@ document.getElementById('btn-cam-pass-confirm').addEventListener('click',functio
     return;
   }
   camUnlocked=true;
-  document.getElementById('cam-locked').style.display='none';
-  document.getElementById('cam-unlocked').style.display='block';
+  switchTab('video');
   toast('🔓 Camera unlocked!');
 });
 document.getElementById('cam-pass-inp').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('btn-cam-pass-confirm').click();});
 document.getElementById('btn-cam-open').addEventListener('click',openCamera);
+document.getElementById('btn-cam-remote-play').addEventListener('click',function(){
+  var rv=document.getElementById('cam-remote');
+  rv.play().then(function(){document.getElementById('btn-cam-remote-play').style.display='none';}).catch(function(){});
+});
 document.getElementById('btn-cam-close').addEventListener('click',function(){
   camModalPurpose='close';
   document.querySelector('#cam-modal .mtitle').textContent='🔒 Enter password to turn off camera';
