@@ -219,11 +219,18 @@ label{display:block;font-size:.67rem;letter-spacing:.14em;text-transform:upperca
           </div>
           <button class="btn bgreen" id="btn-done" style="margin-top:14px">✓ Submit Answer</button>
           <button class="btn bghost" id="btn-skip" style="margin-top:8px;border-color:var(--ad);color:var(--ad)">⚠️ Skip → Get Punished</button>
-          <div id="secret-picker" style="display:none;margin-top:18px">
-            <div style="font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--pu);margin-bottom:10px;text-align:center">🤫 Pick punishment for opponent</div>
-            <div id="secret-punish-grid" style="display:flex;flex-direction:column;gap:8px"></div>
-          </div>
         </div>
+      </div>
+
+      <div class="ph card" id="ph-punish-pick" style="text-align:center">
+        <div class="crev"><div class="cbig" style="color:var(--pu);font-size:2.2rem">⚡ Punish</div><div class="csub" id="pp-sub">Choose their punishment</div></div>
+        <div style="font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--pu);margin:10px 0;text-align:center">🔒 Password-holder's choice</div>
+        <div id="pp-grid" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+
+      <div class="ph card" id="ph-punish-wait" style="text-align:center">
+        <div class="clabel">🤫 Waiting for the password holder to choose your punishment...</div>
+        <div class="dots"><span></span><span></span><span></span></div>
       </div>
 
       <div class="ph card" id="ph-waitans">
@@ -362,7 +369,7 @@ label{display:block;font-size:.67rem;letter-spacing:.14em;text-transform:upperca
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION = 'v3-diag1';
+const APP_VERSION = 'v4-turn1';
 const ROOM     = 'tod:room-v9';
 const PASS     = '03323';
 const WORD_MAX = 500;
@@ -381,19 +388,35 @@ const V_P1CANDS='tod:video:p1cands', V_P2CANDS='tod:video:p2cands';
 // STUN handles same-network / simple-NAT calls. TURN (relay) is required when
 // the two phones are behind stricter or different-network NATs (e.g. one on
 // home wifi, one on mobile data) — without it, many real-world calls between
-// two different locations simply never connect. These TURN credentials are
-// the public, free "Open Relay Project" test servers.
-const ICE_SERVERS=[
-  {urls:'stun:stun.l.google.com:19302'},
-  {urls:'stun:stun1.l.google.com:19302'},
-  {urls:'stun:stun.relay.metered.ca:80'},
-  {urls:'turn:global.relay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
-  {urls:'turn:global.relay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
-  {urls:'turn:global.relay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
-];
+// two different locations simply never connect. TURN credentials are fetched
+// fresh from your own free Metered.ca account (see README) via /api/turn —
+// public "demo" TURN servers are widely reported as no longer reliable.
+const BASE_ICE_SERVERS=[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}];
+let dynamicIceServers=null, turnConfigured=null, iceFetchPromise=null;
+async function getIceServers(){
+  if(dynamicIceServers)return dynamicIceServers;
+  if(iceFetchPromise)return iceFetchPromise;
+  iceFetchPromise=(async function(){
+    try{
+      var r=await fetch('/api/turn');
+      var data=await r.json();
+      turnConfigured=!!data.configured;
+      dynamicIceServers=BASE_ICE_SERVERS.concat(Array.isArray(data.iceServers)?data.iceServers:(data.iceServers&&data.iceServers.iceServers)||[]);
+    }catch(e){
+      console.error('turn fetch failed',e);
+      turnConfigured=false;
+      dynamicIceServers=BASE_ICE_SERVERS;
+    }
+    if(turnConfigured===false){
+      toast('⚠️ No TURN relay configured — calls between different networks may not connect (see README)');
+    }
+    return dynamicIceServers;
+  })();
+  return iceFetchPromise;
+}
 let camUnlocked=false, camActive=false, localStream=null, pc=null, camPollTimer=null;
 let myGen=0, lastSeenPeerGen=-1, lastAppliedOffer=null, lastAppliedAnswer=null, candIdx=0;
-let camModalPurpose='unlock'; // 'unlock' (view tab/open) or 'close' (turn camera off)
+let camModalPurpose='unlock'; // 'unlock' (view tab), 'open' (turn camera on), or 'close' (turn camera off)
 
 async function sPush(key,val){
   try{
@@ -422,23 +445,46 @@ async function sMGet(keys){
   }catch(e){console.error('storage mget failed',e);return keys.map(function(){return null;});}
 }
 
-function ensurePeerConnection(){
-  if(pc)return;
-  pc=new RTCPeerConnection({iceServers:ICE_SERVERS});
-  if(localStream)localStream.getTracks().forEach(function(t){pc.addTrack(t,localStream);});
-  pc.ontrack=function(e){
-    var rv=document.getElementById('cam-remote');
-    if(rv.srcObject!==e.streams[0])rv.srcObject=e.streams[0];
-    var playBtn=document.getElementById('btn-cam-remote-play');
-    rv.play().then(function(){playBtn.style.display='none';}).catch(function(){
-      // Browser blocked autoplay of unmuted video — let the user start it with one tap
-      playBtn.style.display='block';
-    });
-  };
-  pc.onicecandidate=function(e){
-    if(!e.candidate)return;
-    sPush(myRole==='p1'?V_P1CANDS:V_P2CANDS, e.candidate);
-  };
+let pcCreating=false;
+async function ensurePeerConnection(){
+  if(pc||pcCreating)return;
+  pcCreating=true;
+  try{
+    var iceServers=await getIceServers();
+    if(pc)return; // another call finished first while we were awaiting
+    pc=new RTCPeerConnection({iceServers:iceServers});
+    if(localStream)localStream.getTracks().forEach(function(t){pc.addTrack(t,localStream);});
+    pc.ontrack=function(e){
+      var rv=document.getElementById('cam-remote');
+      if(rv.srcObject!==e.streams[0])rv.srcObject=e.streams[0];
+      var playBtn=document.getElementById('btn-cam-remote-play');
+      rv.play().then(function(){playBtn.style.display='none';}).catch(function(){
+        // Browser blocked autoplay of unmuted video — let the user start it with one tap
+        playBtn.style.display='block';
+      });
+    };
+    pc.onicecandidate=function(e){
+      if(!e.candidate)return;
+      sPush(myRole==='p1'?V_P1CANDS:V_P2CANDS, e.candidate);
+    };
+    function updateConnLabel(){
+      var lbl=document.getElementById('cam-remote-label');
+      if(!lbl||!pc)return;
+      var st=pc.connectionState||pc.iceConnectionState;
+      var text={
+        'new':'Them (waiting...)','checking':'Them (connecting...)',
+        'connected':'Them (live)','completed':'Them (live)',
+        'disconnected':'Them (connection dropped, retrying...)',
+        'failed':'Them (connection failed — check network/TURN setup)',
+        'closed':'Them (call ended)'
+      }[st];
+      if(text)lbl.textContent=text;
+    }
+    pc.oniceconnectionstatechange=updateConnLabel;
+    pc.onconnectionstatechange=updateConnLabel;
+  } finally {
+    pcCreating=false;
+  }
 }
 async function startFreshSession(){
   myGen=Date.now();
@@ -457,6 +503,7 @@ async function startLocalCameraAndConnect(resuming){
     else toast('⚠️ Camera/mic permission denied or unavailable');
     return false;
   }
+  getIceServers(); // fire-and-forget: pre-warm so it's ready by the time we need it
   document.getElementById('cam-local').srcObject=localStream;
   document.getElementById('btn-cam-open').style.display='none';
   document.getElementById('btn-cam-close').style.display='';
@@ -504,7 +551,7 @@ async function pollVideo(){
   var vals=await sMGet([V_P1ACTIVE,V_P2ACTIVE,V_P1GEN,V_P2GEN,V_P1OFFER,V_P2ANSWER]);
   var p1Active=vals[0],p2Active=vals[1],p1Gen=vals[2],p2Gen=vals[3],p1Offer=vals[4],p2Answer=vals[5];
   var opp=myRole==='p1'?p2Active:p1Active;
-  document.getElementById('cam-remote-label').textContent=opp?'Them (live)':'Them (waiting...)';
+  if(!pc)document.getElementById('cam-remote-label').textContent=opp?'Them (connecting...)':'Them (waiting...)';
   var peerGen=myRole==='p1'?p2Gen:p1Gen;
   if(peerGen!==lastSeenPeerGen){
     lastSeenPeerGen=peerGen;
@@ -512,14 +559,17 @@ async function pollVideo(){
     candIdx=0;lastAppliedOffer=null;lastAppliedAnswer=null;
     document.getElementById('cam-remote').srcObject=null;
     document.getElementById('btn-cam-remote-play').style.display='none';
+    document.getElementById('cam-remote-label').textContent='Them (waiting...)';
   }
   var bothActive=p1Active&&p2Active;
   if(!bothActive){
     if(pc){pc.close();pc=null;}
     document.getElementById('cam-remote').srcObject=null;document.getElementById('btn-cam-remote-play').style.display='none';
+    document.getElementById('cam-remote-label').textContent='Them (waiting...)';
     return;
   }
-  ensurePeerConnection();
+  await ensurePeerConnection();
+  if(!pc)return; // still setting up (e.g. fetching TURN credentials) — next poll will continue
   if(myRole==='p1'){
     if(!p1Offer&&pc.signalingState==='stable'){
       var offer=await pc.createOffer();await pc.setLocalDescription(offer);
@@ -821,7 +871,7 @@ function renderGame(state){
       document.getElementById('ans-sub').textContent='You chose — now face it!';
       var abox=document.getElementById('ans-box');abox.className='abox '+state.choice;
       var tw=document.getElementById('ans-type-wrap');
-      if(state.question){renderContent(abox,state.question);tw.style.display='block';document.getElementById('ans-type-box').className='type-box '+state.choice;var ath=document.getElementById('ans-type-hint');ath.className='type-hint '+state.choice;ath.textContent=state.choice==='truth'?'✦ Type your answer':'🔥 Describe your dare attempt';document.getElementById('btn-skip').style.display='';document.getElementById('secret-picker').style.display='none';}
+      if(state.question){renderContent(abox,state.question);tw.style.display='block';document.getElementById('ans-type-box').className='type-box '+state.choice;var ath=document.getElementById('ans-type-hint');ath.className='type-hint '+state.choice;ath.textContent=state.choice==='truth'?'✦ Type your answer':'🔥 Describe your dare attempt';document.getElementById('btn-skip').style.display='';}
       else{abox.innerHTML='<div class="dots"><span></span><span></span><span></span></div>';tw.style.display='none';}
     }else{
       banner.textContent='⟡ '+opp+' is responding...';banner.className='tbanner theirs';showPh('ph-waitans');
@@ -830,6 +880,29 @@ function renderGame(state){
       var ww=document.getElementById('wa-ans-wrap'),wab=document.getElementById('wa-ans-box'),wd=document.getElementById('wa-dots');
       if(state.answer){wab.className='type-box '+state.choice;renderContent(wab,state.answer);ww.style.display='block';wd.style.display='none';document.getElementById('wa-sub').textContent=opp+' answered!';}
       else{ww.style.display='none';wd.style.display='flex';document.getElementById('wa-sub').textContent=state.question?opp+' is typing...':'Sending question...';}
+    }
+    return;
+  }
+  if(state.phase==='punish-pending'){
+    var skipper=state.turn==='p1'?state.p1:state.p2;
+    if(myRole==='p1'){
+      banner.textContent='⟡ Choose '+skipper+"'s punishment";banner.className='tbanner punishbanner';
+      showPh('ph-punish-pick');
+      document.getElementById('pp-sub').textContent=skipper+' skipped — pick their punishment';
+      var grid=document.getElementById('pp-grid');
+      grid.innerHTML='';
+      PUNISHMENTS.forEach(function(p){
+        var d=document.createElement('div');
+        d.style.cssText='background:var(--sur2);border:1.5px solid var(--bdr);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .2s;text-align:left';
+        d.innerHTML='<span style="font-size:1.3rem">'+p.icon+'</span><div><div style="font-size:.82rem;font-weight:700;color:var(--pu)">'+p.title+'</div><div style="font-size:.7rem;color:var(--mu);line-height:1.4;margin-top:2px">'+p.desc+'</div></div>';
+        d.addEventListener('mouseenter',function(){this.style.borderColor='var(--pu)';this.style.background='var(--gp)';});
+        d.addEventListener('mouseleave',function(){this.style.borderColor='var(--bdr)';this.style.background='var(--sur2)';});
+        d.addEventListener('click',(function(pu){return function(){commitSkip(pu);};})(p));
+        grid.appendChild(d);
+      });
+    }else{
+      banner.textContent='⟡ Waiting for the password holder...';banner.className='tbanner punishbanner';
+      showPh('ph-punish-wait');
     }
     return;
   }
@@ -886,20 +959,9 @@ async function markDone(){
 }
 
 async function skipRound(){
-  if(myRole==='p1'){
-    var picker=document.getElementById('secret-picker'),grid=document.getElementById('secret-punish-grid');
-    grid.innerHTML='';
-    PUNISHMENTS.forEach(function(p){
-      var d=document.createElement('div');d.style.cssText='background:var(--sur2);border:1.5px solid var(--bdr);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .2s';
-      d.innerHTML='<span style="font-size:1.3rem">'+p.icon+'</span><div><div style="font-size:.82rem;font-weight:700;color:var(--pu)">'+p.title+'</div><div style="font-size:.7rem;color:var(--mu);line-height:1.4;margin-top:2px">'+p.desc+'</div></div>';
-      d.addEventListener('mouseenter',function(){this.style.borderColor='var(--pu)';this.style.background='var(--gp)';});
-      d.addEventListener('mouseleave',function(){this.style.borderColor='var(--bdr)';this.style.background='var(--sur2)';});
-      d.addEventListener('click',(function(pu){return async function(){document.getElementById('secret-picker').style.display='none';document.getElementById('btn-skip').style.display='none';await commitSkip(pu);};})(p));
-      grid.appendChild(d);
-    });
-    picker.style.display='block';document.getElementById('btn-skip').style.display='none';return;
-  }
-  await commitSkip(getRP());
+  var s=await sGet(ROOM,true);if(!s)return;
+  s.phase='punish-pending';s.answer=null;s.ts=Date.now();
+  await sSet(ROOM,s,true);renderGame(s);
 }
 async function commitSkip(p){var s=await sGet(ROOM,true);if(!s)return;s.answer=null;s.punishment=p;s.status=(s.turn==='p1'?s.p1:s.p2)+' skipped!';s.phase='round-done';s.ts=Date.now();await sSet(ROOM,s,true);renderGame(s);toast('⚡ Punishment assigned!');}
 async function nextRound(){var s=await sGet(ROOM,true);if(!s)return;s.turn=s.turn==='p1'?'p2':'p1';s.phase='choose';s.choice=null;s.question=null;s.answer=null;s.status=null;s.punishment=null;s.ts=Date.now();await sSet(ROOM,s,true);renderGame(s);}
@@ -970,12 +1032,22 @@ document.getElementById('btn-cam-pass-confirm').addEventListener('click',functio
     closeCamera();
     return;
   }
+  if(camModalPurpose==='open'){
+    openCamera();
+    return;
+  }
   camUnlocked=true;
   switchTab('video');
   toast('🔓 Camera unlocked!');
 });
 document.getElementById('cam-pass-inp').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('btn-cam-pass-confirm').click();});
-document.getElementById('btn-cam-open').addEventListener('click',openCamera);
+document.getElementById('btn-cam-open').addEventListener('click',function(){
+  camModalPurpose='open';
+  document.querySelector('#cam-modal .mtitle').textContent='🔒 Enter password to turn on camera';
+  document.getElementById('btn-cam-pass-confirm').textContent='Turn On →';
+  document.getElementById('cam-modal').style.display='flex';
+  setTimeout(function(){document.getElementById('cam-pass-inp').focus();},80);
+});
 document.getElementById('btn-cam-remote-play').addEventListener('click',function(){
   var rv=document.getElementById('cam-remote');
   rv.play().then(function(){document.getElementById('btn-cam-remote-play').style.display='none';}).catch(function(){});
